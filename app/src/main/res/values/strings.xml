@@ -2,6 +2,8 @@
     <string name="app_name">MajlisBroadcast</string>
     <string name="status_ready">Ready.</string>
     <string name="status_mic_denied">Mic permission denied — can\'t record.</string>
+
+    <string name="section_file_test">Phase 1 -- local file test</string>
     <string name="btn_start_recording">Start Test Recording</string>
     <string name="btn_stop_recording">Stop Recording</string>
     <string name="btn_play">Play Last Recording</string>
@@ -12,4 +14,13 @@
     <string name="status_playing">Playing %1$s…</string>
     <string name="status_playback_failed">Playback failed: %1$s</string>
     <string name="share_chooser_title">Share test recording</string>
+
+    <string name="section_live_test">Phase 2 -- live stream test</string>
+    <string name="btn_go_live">Go Live (Test)</string>
+    <string name="btn_stop_live">Stop</string>
+    <string name="status_live_missing_secrets">secrets.properties missing or incomplete -- add azuracast.host / port / username / password to the project root secrets.properties and rebuild.</string>
+    <string name="status_live_connecting">Connecting to %1$s:%2$d…</string>
+    <string name="status_live_on_air">Live -- check AzuraCast / the public stream now.</string>
+    <string name="status_live_stopped">Stopped.</string>
+    <string name="status_live_error">Live error: %1$s</string>
 </resources>
