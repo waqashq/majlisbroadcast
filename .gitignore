@@ -1,0 +1,28 @@
+# --- Android / Gradle build output ---
+*.iml
+.gradle/
+/local.properties
+/build/
+/*/build/
+/captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+
+# --- Secrets: real credentials must never be committed ---
+# This repo is public. Server host/mount/password live only in a local,
+# git-ignored secrets file, never in tracked source.
+secrets.properties
+secrets.*.properties
+*.secrets
+
+# --- Keystores ---
+*.jks
+*.keystore
+
+# --- IDE / OS ---
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
