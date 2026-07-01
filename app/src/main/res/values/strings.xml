@@ -1,0 +1,15 @@
+<resources>
+    <string name="app_name">MajlisBroadcast</string>
+    <string name="status_ready">Ready.</string>
+    <string name="status_mic_denied">Mic permission denied — can\'t record.</string>
+    <string name="btn_start_recording">Start Test Recording</string>
+    <string name="btn_stop_recording">Stop Recording</string>
+    <string name="btn_play">Play Last Recording</string>
+    <string name="btn_share">Share Last Recording</string>
+    <string name="status_recording">Recording… speak normally, then Stop.</string>
+    <string name="status_saved">Saved: %1$s</string>
+    <string name="status_failed">Recording failed: %1$s</string>
+    <string name="status_playing">Playing %1$s…</string>
+    <string name="status_playback_failed">Playback failed: %1$s</string>
+    <string name="share_chooser_title">Share test recording</string>
+</resources>
