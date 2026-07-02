@@ -64,10 +64,25 @@ class BroadcastEngine(
         private const val COALESCE_TARGET_MS = 200
         private const val COALESCE_MAX_WAIT_MS = 250L
 
-        // Liquidsoap holds a dropped mount slot ~10-30s -- back off in that
-        // window instead of spamming reconnects (section 5).
+        // Liquidsoap holds a dropped mount slot ~10-30s on a clean
+        // disconnect, but Phase 6 long-run testing showed an *unclean*
+        // network-loss drop (no FIN/RST reaches the server -- it only
+        // notices via its own read timeout) can hold the slot for closer
+        // to 45-50s. Back off across that wider window instead of
+        // spamming reconnects and racing a still-held mount (section 5).
         private const val BACKOFF_MIN_MS = 10_000L
-        private const val BACKOFF_MAX_MS = 30_000L
+        private const val BACKOFF_MAX_MS = 45_000L
+
+        // Minimum grace period before honoring an early wake-up from
+        // notifyNetworkAvailable(). Without this floor, a fast Wi-Fi
+        // handover fires the "network back" signal almost instantly,
+        // triggering an immediate reconnect attempt before the server has
+        // had any chance to notice the old TCP connection died -- which
+        // just gets rejected with "403 Mountpoint already taken",
+        // wasting an attempt and extending the real outage. This keeps
+        // the fast-path's benefit for genuinely brief blips while
+        // preventing the too-eager retry seen in testing.
+        private const val RECONNECT_GRACE_MS = 5_000L
 
         // UNPROCESSED deliberately has no AGC (that's what keeps voice full
         // instead of thin -- see section 3), but that also means no
@@ -428,10 +443,14 @@ class BroadcastEngine(
             // --- (Re)connect if needed ---
             if (currentUploader == null) {
                 if (state == State.RECONNECTING) {
-                    val deadline = SystemClock.elapsedRealtime() + backoffMs
+                    val waitStart = SystemClock.elapsedRealtime()
+                    val deadline = waitStart + backoffMs
+                    val graceDeadline = waitStart + RECONNECT_GRACE_MS
                     while (running && SystemClock.elapsedRealtime() < deadline) {
-                        if (networkAvailableSignal) {
-                            // A new network just appeared -- retry now
+                        val now = SystemClock.elapsedRealtime()
+                        if (networkAvailableSignal && now >= graceDeadline) {
+                            // A new network appeared and we've waited out
+                            // the minimum grace period -- retry now
                             // instead of waiting out the rest of the
                             // backoff (section 7: ConnectivityManager
                             // drives reconnect on handover).

@@ -52,3 +52,21 @@ Real host, port, username, and password live only in the local, git-ignored
 `secrets.properties` — never in this file or anywhere in the repo.
 
 Verified: 2026-07-01.
+
+## Update — Phase 6 long-run testing (2026-07-02)
+
+Under repeated rapid network handovers (Wi-Fi toggled off/on several times
+in a short window), the mount-hold window after an *unclean* drop (network
+simply vanishes -- no FIN/RST reaches the server, which only notices via
+its own read timeout) proved to run closer to **45-50 seconds** in
+practice, not the 10-30s originally estimated from clean-disconnect
+testing in Gate 1. A reconnect attempt inside that window is rejected with
+`HTTP/1.0 403 Mountpoint already taken`.
+
+The app's backoff ceiling and its network-handover fast-path were both
+adjusted in response (see `BroadcastEngine.kt`: `BACKOFF_MAX_MS`,
+`RECONNECT_GRACE_MS`). If 403s during reconnect still show up in the debug
+log after this fix, the more durable fix is lowering the source/read
+timeout on the AzuraCast/Liquidsoap harbor side so it notices a dead
+connection sooner.
+
