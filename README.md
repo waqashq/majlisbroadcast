@@ -22,4 +22,4 @@ ever committed by accident, stop and rotate the AzuraCast source password.
 ## Status
 
 Building in strict phase order per `majlisbroadcast.md` section 12.
-Currently: Phase 2 (raw-socket uploader) -- Phases 0, 0.5 Gate 1, and 1 complete.
+Currently: Phase 3 (foreground service + robustness) -- Phases 0, 0.5 Gate 1, 1, and 2 complete.

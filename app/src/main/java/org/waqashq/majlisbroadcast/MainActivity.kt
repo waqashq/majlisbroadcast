@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.MediaPlayer
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -22,7 +23,8 @@ import java.util.Locale
 /**
  * Test harness ONLY -- not the real app UI (see majlisbroadcast.md section 8
  * / Phase 5). Two independent sections: the Phase 1 local-file test, and the
- * Phase 2 live-streaming test.
+ * Phase 3 live broadcast (via BroadcastService), which superseded the
+ * Phase 2 direct-in-Activity streaming test.
  */
 class MainActivity : AppCompatActivity() {
 
@@ -37,10 +39,9 @@ class MainActivity : AppCompatActivity() {
     private var lastFile: File? = null
     private var mediaPlayer: MediaPlayer? = null
 
-    // --- Phase 2: live stream test ---
+    // --- Phase 3: live broadcast service ---
     private lateinit var liveStatusText: TextView
     private lateinit var goLiveButton: Button
-    private var streamer: AacNetworkStreamer? = null
     private var isLive = false
     private val uiHandler = Handler(Looper.getMainLooper())
     private val livePoller = object : Runnable {
@@ -55,6 +56,10 @@ class MainActivity : AppCompatActivity() {
     ) { granted ->
         if (!granted) statusText.text = getString(R.string.status_mic_denied)
     }
+
+    private val requestNotificationPermission = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { /* proceed regardless -- the FGS still runs, the notification just won't show without it */ }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -76,7 +81,7 @@ class MainActivity : AppCompatActivity() {
         playButton.setOnClickListener { onPlayClicked() }
         shareButton.setOnClickListener { onShareClicked() }
 
-        // --- Phase 2 section ---
+        // --- Phase 3 section ---
         val liveSectionLabel = TextView(this).apply { text = getString(R.string.section_live_test); textSize = 14f }
         liveStatusText = TextView(this).apply { text = ""; textSize = 16f }
         goLiveButton = Button(this).apply { text = getString(R.string.btn_go_live) }
@@ -99,6 +104,19 @@ class MainActivity : AppCompatActivity() {
 
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             requestMicPermission.launch(Manifest.permission.RECORD_AUDIO)
+        }
+
+        // If the service is already live from before this Activity was
+        // (re)created (e.g. screen rotation, or returning to the app while
+        // broadcasting in the background), reflect that immediately instead
+        // of showing a stale "Go Live" button.
+        if (BroadcastService.state == BroadcastEngine.State.LIVE ||
+            BroadcastService.state == BroadcastEngine.State.CONNECTING ||
+            BroadcastService.state == BroadcastEngine.State.RECONNECTING
+        ) {
+            isLive = true
+            goLiveButton.text = getString(R.string.btn_stop_live)
+            uiHandler.post(livePoller)
         }
     }
 
@@ -164,11 +182,17 @@ class MainActivity : AppCompatActivity() {
         startActivity(Intent.createChooser(intent, getString(R.string.share_chooser_title)))
     }
 
-    // ================= Phase 2: live stream test =================
+    // ================= Phase 3: live broadcast service =================
 
     private fun onGoLiveClicked() {
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             requestMicPermission.launch(Manifest.permission.RECORD_AUDIO)
+            return
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            requestNotificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
             return
         }
 
@@ -177,13 +201,7 @@ class MainActivity : AppCompatActivity() {
                 liveStatusText.text = getString(R.string.status_live_missing_secrets)
                 return
             }
-            val uploader = IcecastUploader(
-                BuildConfig.AZURACAST_HOST,
-                BuildConfig.AZURACAST_PORT,
-                BuildConfig.AZURACAST_USERNAME,
-                BuildConfig.AZURACAST_PASSWORD
-            )
-            streamer = AacNetworkStreamer(uploader).also { it.start() }
+            BroadcastService.start(this)
             isLive = true
             goLiveButton.text = getString(R.string.btn_stop_live)
             liveStatusText.text = getString(
@@ -191,7 +209,7 @@ class MainActivity : AppCompatActivity() {
             )
             uiHandler.post(livePoller)
         } else {
-            streamer?.stop()
+            BroadcastService.stop(this)
             isLive = false
             goLiveButton.text = getString(R.string.btn_go_live)
             liveStatusText.text = getString(R.string.status_live_stopped)
@@ -200,19 +218,23 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun pollLiveState() {
-        val s = streamer ?: return
-        when (s.state) {
-            AacNetworkStreamer.State.CONNECTING -> liveStatusText.text = getString(
+        val telemetry = getString(R.string.status_telemetry, BroadcastService.reconnectCount, BroadcastService.dropCount)
+        when (BroadcastService.state) {
+            BroadcastEngine.State.CONNECTING -> liveStatusText.text = getString(
                 R.string.status_live_connecting, BuildConfig.AZURACAST_HOST, BuildConfig.AZURACAST_PORT
             )
-            AacNetworkStreamer.State.LIVE -> liveStatusText.text = getString(R.string.status_live_on_air)
-            AacNetworkStreamer.State.ERROR -> {
-                liveStatusText.text = getString(R.string.status_live_error, s.lastError ?: "unknown")
-                isLive = false
-                goLiveButton.text = getString(R.string.btn_go_live)
-                uiHandler.removeCallbacks(livePoller)
+            BroadcastEngine.State.LIVE -> liveStatusText.text = getString(R.string.status_live_on_air) + telemetry
+            BroadcastEngine.State.RECONNECTING -> liveStatusText.text = getString(R.string.status_live_reconnecting) + telemetry
+            BroadcastEngine.State.ERROR -> {
+                liveStatusText.text = getString(R.string.status_live_error, BroadcastService.lastError ?: "unknown")
             }
-            AacNetworkStreamer.State.STOPPED, AacNetworkStreamer.State.IDLE -> { /* no-op */ }
+            BroadcastEngine.State.STOPPED, BroadcastEngine.State.IDLE -> {
+                if (isLive) {
+                    isLive = false
+                    goLiveButton.text = getString(R.string.btn_go_live)
+                    uiHandler.removeCallbacks(livePoller)
+                }
+            }
         }
     }
 
@@ -220,7 +242,9 @@ class MainActivity : AppCompatActivity() {
         super.onDestroy()
         mediaPlayer?.release()
         recorder?.stop()
-        streamer?.stop()
         uiHandler.removeCallbacks(livePoller)
+        // Note: the broadcast service is NOT stopped here -- it's meant to
+        // keep running in the background after the Activity goes away.
+        // Only the explicit Stop button (-> BroadcastService.stop()) ends it.
     }
 }

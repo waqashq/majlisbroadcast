@@ -15,12 +15,16 @@
     <string name="status_playback_failed">Playback failed: %1$s</string>
     <string name="share_chooser_title">Share test recording</string>
 
-    <string name="section_live_test">Phase 2 -- live stream test</string>
-    <string name="btn_go_live">Go Live (Test)</string>
+    <string name="section_live_test">Phase 3 -- foreground broadcast service</string>
+    <string name="btn_go_live">Go Live</string>
     <string name="btn_stop_live">Stop</string>
     <string name="status_live_missing_secrets">secrets.properties missing or incomplete -- add azuracast.host / port / username / password to the project root secrets.properties and rebuild.</string>
     <string name="status_live_connecting">Connecting to %1$s:%2$d…</string>
     <string name="status_live_on_air">Live -- check AzuraCast / the public stream now.</string>
+    <string name="status_live_reconnecting">Reconnecting…</string>
     <string name="status_live_stopped">Stopped.</string>
     <string name="status_live_error">Live error: %1$s</string>
+    <string name="status_telemetry"> (reconnects: %1$d, drops: %2$d)</string>
+
+    <string name="notification_channel_name">Live broadcast</string>
 </resources>

@@ -7,26 +7,33 @@ import android.media.MediaCodecInfo
 import android.media.MediaFormat
 import android.media.MediaRecorder
 import android.os.Process
-import java.util.concurrent.atomic.AtomicBoolean
+import android.os.SystemClock
+import java.io.ByteArrayOutputStream
+import java.io.IOException
 
 /**
- * Phase 2: same capture + AAC-LC + ADTS pipeline as AacFileRecorder (Phase
- * 1), but writes frames to the live AzuraCast harbor over IcecastUploader
- * instead of a local file.
+ * Phase 3 pipeline: capture + AAC-LC + ADTS on a dedicated capture/encode
+ * thread, decoupled via a bounded drop-oldest FrameQueue from a separate
+ * writer thread that owns the socket, coalesces frames, and handles
+ * reconnect + backoff on its own. See majlisbroadcast.md sections 3 and 5.
  *
- * Deliberately self-contained rather than sharing code with
- * AacFileRecorder: that class is already verified working on a real device,
- * and Phase 3 restructures this whole pipeline into a foreground service
- * with a bounded queue anyway, so a little duplication now beats an early
- * shared abstraction that gets thrown away next phase.
- *
- * No reconnect logic here -- if the connection drops, capture stops and the
- * error surfaces via lastError/state. Auto-reconnect, backoff, and the
- * bounded queue are Phase 3 scope (majlisbroadcast.md section 5).
+ * The capture thread NEVER touches the network. A stalled or reconnecting
+ * socket cannot block it -- that decoupling is the whole point of the
+ * queue.
  */
-class AacNetworkStreamer(private val uploader: IcecastUploader) {
+class BroadcastEngine(
+    private val host: String,
+    private val port: Int,
+    private val username: String,
+    private val password: String,
+    private val listener: Listener
+) {
+    enum class State { IDLE, CONNECTING, LIVE, RECONNECTING, STOPPED, ERROR }
 
-    enum class State { IDLE, CONNECTING, LIVE, STOPPED, ERROR }
+    interface Listener {
+        fun onStateChanged(state: State, error: String?)
+        fun onTelemetry(dropCount: Long, reconnectCount: Int)
+    }
 
     companion object {
         private const val SAMPLE_RATE = 44100
@@ -37,48 +44,85 @@ class AacNetworkStreamer(private val uploader: IcecastUploader) {
             96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050,
             16000, 12000, 11025, 8000, 7350
         )
+
+        // ~150 frames at ~23ms/frame (1024 samples @ 44.1kHz) is a ~3.4s
+        // real-time cushion: enough to absorb a brief stall without
+        // unbounded memory growth.
+        private const val QUEUE_CAPACITY_FRAMES = 150
+        private const val MS_PER_FRAME = 23
+
+        // Coalesce frames into one socket write, capped per section 5's
+        // 100-250ms rule.
+        private const val COALESCE_TARGET_MS = 200
+        private const val COALESCE_MAX_WAIT_MS = 250L
+
+        // Liquidsoap holds a dropped mount slot ~10-30s -- back off in that
+        // window instead of spamming reconnects (section 5).
+        private const val BACKOFF_MIN_MS = 10_000L
+        private const val BACKOFF_MAX_MS = 30_000L
     }
 
-    @Volatile var lastError: String? = null
-        private set
-    @Volatile var state: State = State.IDLE
-        private set
+    @Volatile private var running = false
+    private var captureThread: Thread? = null
+    private var writerThread: Thread? = null
+    private val queue = FrameQueue(QUEUE_CAPACITY_FRAMES)
 
-    private val running = AtomicBoolean(false)
-    private var thread: Thread? = null
+    @Volatile private var reconnectCount = 0
+    @Volatile private var lastError: String? = null
+    @Volatile private var currentUploader: IcecastUploader? = null
+
+    @Volatile private var state: State = State.IDLE
+        set(value) {
+            field = value
+            listener.onStateChanged(value, lastError)
+        }
 
     @Volatile private var adtsProfile = 1
     @Volatile private var adtsSampleRateIndex =
         SAMPLE_RATE_TABLE.indexOf(SAMPLE_RATE).let { if (it < 0) 4 else it }
     @Volatile private var adtsChannelConfig = CHANNEL_COUNT
-    private var sampleCount = 0L
 
     fun start() {
-        if (running.getAndSet(true)) return
-        lastError = null
+        if (running) return
+        running = true
+        queue.clear()
         state = State.CONNECTING
-        thread = Thread({ runLoop() }, "AacNetworkStreamer").apply {
+
+        captureThread = Thread({ runCapture() }, "BroadcastEngine-capture").apply {
+            priority = Thread.MAX_PRIORITY
+            start()
+        }
+        writerThread = Thread({ runWriter() }, "BroadcastEngine-writer").apply {
             priority = Thread.MAX_PRIORITY
             start()
         }
     }
 
+    /**
+     * Stops both threads. Force-closes any in-flight socket immediately
+     * (rather than waiting out its write-timeout) so shutdown is prompt --
+     * important since the service's onDestroy calls this synchronously.
+     */
     fun stop() {
-        running.set(false)
-        thread?.join(3000)
-        thread = null
+        running = false
+        currentUploader?.close()
+        captureThread?.join(3000)
+        writerThread?.join(3000)
+        captureThread = null
+        writerThread = null
+        state = State.STOPPED
     }
 
-    private fun runLoop() {
+    // ================= Capture + encode thread =================
+
+    private fun runCapture() {
         Process.setThreadPriority(Process.THREAD_PRIORITY_AUDIO)
 
         var audioRecord: AudioRecord? = null
         var codec: MediaCodec? = null
+        var sampleCount = 0L
 
         try {
-            uploader.connectAndHandshake()
-            state = State.LIVE
-
             val minBuf = AudioRecord.getMinBufferSize(
                 SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT
             )
@@ -103,7 +147,7 @@ class AacNetworkStreamer(private val uploader: IcecastUploader) {
             val pcmBuf = ByteArray(bufferSize)
             val bufferInfo = MediaCodec.BufferInfo()
 
-            while (running.get()) {
+            while (running) {
                 val inIndex = codec.dequeueInputBuffer(10_000)
                 if (inIndex >= 0) {
                     val read = audioRecord.read(pcmBuf, 0, pcmBuf.size, AudioRecord.READ_BLOCKING)
@@ -113,7 +157,7 @@ class AacNetworkStreamer(private val uploader: IcecastUploader) {
                         inputBuffer.put(pcmBuf, 0, read)
                         val ptsUs = sampleCount * 1_000_000L / SAMPLE_RATE
                         codec.queueInputBuffer(inIndex, 0, read, ptsUs, 0)
-                        sampleCount += read / 2
+                        sampleCount += read / 2 // 16-bit mono: 2 bytes per sample
                     } else if (inputBuffer != null) {
                         codec.queueInputBuffer(inIndex, 0, 0, 0, 0)
                     }
@@ -131,17 +175,19 @@ class AacNetworkStreamer(private val uploader: IcecastUploader) {
                 }
             }
             drainEncoder(codec, bufferInfo, waitForEos = true)
-            state = State.STOPPED
         } catch (t: Throwable) {
+            // A capture/encoder failure is fatal for this session -- surface
+            // it and let the writer thread wind down too. Per section 5,
+            // recovery from a dead service/engine is user-initiated, not
+            // automatic.
             lastError = "${t.javaClass.simpleName}: ${t.message}"
+            running = false
             state = State.ERROR
         } finally {
             try { audioRecord?.stop() } catch (_: Throwable) {}
             audioRecord?.release()
             try { codec?.stop() } catch (_: Throwable) {}
             codec?.release()
-            uploader.close()
-            running.set(false)
         }
     }
 
@@ -178,10 +224,9 @@ class AacNetworkStreamer(private val uploader: IcecastUploader) {
                             encoded.limit(info.offset + info.size)
                             val raw = ByteArray(info.size)
                             encoded.get(raw)
-                            // Throws on stall / half-open / server rejection --
-                            // caught in runLoop(), which tears everything down
-                            // and surfaces lastError/state.
-                            uploader.writeAdtsFrame(wrapAdts(raw))
+                            // Enqueue only -- never touches the network.
+                            // A stalled/reconnecting socket cannot block this.
+                            queue.offer(wrapAdts(raw))
                         }
                     }
                     val isEos = info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0
@@ -221,5 +266,64 @@ class AacNetworkStreamer(private val uploader: IcecastUploader) {
         System.arraycopy(header, 0, out, 0, header.size)
         System.arraycopy(raw, 0, out, header.size, raw.size)
         return out
+    }
+
+    // ================= Writer + reconnect thread =================
+
+    private fun runWriter() {
+        var backoffMs = BACKOFF_MIN_MS
+
+        while (running) {
+            // --- (Re)connect if needed ---
+            if (currentUploader == null) {
+                if (state == State.RECONNECTING) {
+                    val deadline = SystemClock.elapsedRealtime() + backoffMs
+                    while (running && SystemClock.elapsedRealtime() < deadline) {
+                        Thread.sleep(200)
+                    }
+                    if (!running) break
+                }
+                try {
+                    val u = IcecastUploader(host, port, username, password)
+                    u.connectAndHandshake()
+                    currentUploader = u
+                    state = State.LIVE
+                    backoffMs = BACKOFF_MIN_MS
+                } catch (e: IOException) {
+                    lastError = "${e.javaClass.simpleName}: ${e.message}"
+                    reconnectCount++
+                    listener.onTelemetry(queue.totalDropped, reconnectCount)
+                    state = State.RECONNECTING
+                    backoffMs = (backoffMs * 2).coerceAtMost(BACKOFF_MAX_MS)
+                    continue
+                }
+            }
+
+            // --- Coalesce whole frames up to ~200ms, then one write ---
+            val coalesced = ByteArrayOutputStream()
+            val deadline = SystemClock.elapsedRealtime() + COALESCE_MAX_WAIT_MS
+            var approxMs = 0
+            while (running && approxMs < COALESCE_TARGET_MS) {
+                val remaining = deadline - SystemClock.elapsedRealtime()
+                if (remaining <= 0) break
+                val frame = queue.poll(remaining) ?: break
+                coalesced.write(frame)
+                approxMs += MS_PER_FRAME
+            }
+            if (coalesced.size() == 0) continue
+
+            try {
+                currentUploader?.writeAdtsFrame(coalesced.toByteArray())
+            } catch (e: IOException) {
+                lastError = "${e.javaClass.simpleName}: ${e.message}"
+                currentUploader?.close()
+                currentUploader = null
+                reconnectCount++
+                listener.onTelemetry(queue.totalDropped, reconnectCount)
+                state = State.RECONNECTING
+            }
+        }
+        currentUploader?.close()
+        currentUploader = null
     }
 }
