@@ -18,6 +18,7 @@ import android.net.NetworkRequest
 import android.net.wifi.WifiManager
 import android.os.IBinder
 import android.os.PowerManager
+import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 
@@ -51,6 +52,17 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
         @Volatile var scoRefusalCount: Int = 0
             private set
         @Volatile var focusLost: Boolean = false
+            private set
+        @Volatile var queueDepth: Int = 0
+            private set
+        @Volatile var burstDropEvents: Int = 0
+            private set
+        @Volatile var micLevel: Int = 0
+            private set
+        @Volatile var micClipping: Boolean = false
+            private set
+        /** SystemClock.elapsedRealtime() when Go Live was tapped, or 0 if never started this session. */
+        @Volatile var sessionStartRealtime: Long = 0
             private set
 
         fun start(context: Context) {
@@ -101,6 +113,7 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
             )
             acquireLocks()
+            sessionStartRealtime = SystemClock.elapsedRealtime()
 
             val am = getSystemService(AUDIO_SERVICE) as AudioManager
             audioManager = am
@@ -132,6 +145,7 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
         abandonAudioFocus()
         releaseLocks()
         state = BroadcastEngine.State.STOPPED
+        sessionStartRealtime = 0
         stopSelf()
     }
 
@@ -142,6 +156,7 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
         unregisterNetworkCallback()
         abandonAudioFocus()
         releaseLocks()
+        sessionStartRealtime = 0
         super.onDestroy()
     }
 
@@ -165,13 +180,23 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
         updateNotification(newState)
     }
 
-    override fun onTelemetry(drops: Long, reconnects: Int, scoRefusals: Int, muted: Boolean) {
+    override fun onTelemetry(
+        drops: Long, reconnects: Int, scoRefusals: Int, muted: Boolean,
+        depth: Int, bursts: Int
+    ) {
         dropCount = drops
         reconnectCount = reconnects
         scoRefusalCount = scoRefusals
+        queueDepth = depth
+        burstDropEvents = bursts
         val focusChanged = focusLost != muted
         focusLost = muted
         if (focusChanged) updateNotification(state)
+    }
+
+    override fun onLevelUpdate(level: Int, clipping: Boolean) {
+        micLevel = level
+        micClipping = clipping
     }
 
     // ================= Network handover (section 7) =================

@@ -1,0 +1,42 @@
+<resources>
+    <string name="app_name">MajlisBroadcast</string>
+
+    <string name="status_mic_denied">مائیک کی اجازت نہیں ملی — نشریات ممکن نہیں۔</string>
+
+    <string name="btn_go_live">براہ راست نشر کریں</string>
+    <string name="btn_stop_live">روکیں</string>
+    <string name="status_live_missing_secrets">ترتیب نامکمل ہے — پراجیکٹ کی secrets.properties میں azuracast.host / port / username / password شامل کریں اور دوبارہ بنائیں۔</string>
+    <string name="status_live_connecting">%1$s:%2$d سے رابطہ ہو رہا ہے…</string>
+    <string name="status_live_on_air">براہ راست</string>
+    <string name="status_live_reconnecting">دوبارہ رابطہ ہو رہا ہے…</string>
+    <string name="status_live_stopped">آف لائن۔</string>
+    <string name="status_live_error">خرابی: %1$s</string>
+    <string name="status_muted_suffix"> (خاموش — کال جاری ہے)</string>
+
+    <string name="mic_level_label">مائیک کی سطح</string>
+    <string name="mic_clipping_warning">آواز کٹ رہی ہے — پیچھے ہوں یا آہستہ بولیں</string>
+
+    <string name="elapsed_time_format">گزرا وقت: %1$s</string>
+
+    <string name="server_panel_title">سرور (صرف دیکھنے کے لیے)</string>
+    <string name="server_panel_host_port">%1$s : %2$d</string>
+    <string name="server_panel_not_configured">ترتیب نہیں دی گئی</string>
+
+    <string name="diagnostics_title">تشخیصی معلومات</string>
+    <string name="diagnostics_line">دوبارہ رابطے: %1$d\nضائع شدہ فریمز: %2$d (%3$d مرتبہ)\nقطار: %4$d/%5$d فریمز\nبٹ ریٹ: %6$d kbps\nبفرنگ تاخیر (تخمینہ): ~%7$d ms\nبلوٹوتھ SCO مسترد: %8$d بار</string>
+
+    <string name="btn_view_log">ڈیبگ لاگ دیکھیں</string>
+    <string name="btn_export_log">لاگ ایکسپورٹ کریں</string>
+    <string name="btn_close_log">بند کریں</string>
+    <string name="log_title">ڈیبگ لاگ</string>
+    <string name="log_empty">ابھی تک کوئی واقعہ نہیں۔</string>
+    <string name="log_share_title">ڈیبگ لاگ شیئر کریں</string>
+    <string name="log_exported">ایکسپورٹ ہو گیا: %1$s</string>
+
+    <string name="notification_channel_name">براہ راست نشریات</string>
+
+    <string name="build_version">بلڈ: %1$s (%2$d)</string>
+
+    <string name="battery_state_ignoring">بیٹری آپٹیمائزیشن: نظر انداز (بہتر)</string>
+    <string name="battery_state_not_ignoring">بیٹری آپٹیمائزیشن: نظر انداز نہیں</string>
+</resources>

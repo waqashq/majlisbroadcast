@@ -1,31 +1,37 @@
 <resources>
     <string name="app_name">MajlisBroadcast</string>
-    <string name="status_ready">Ready.</string>
-    <string name="status_mic_denied">Mic permission denied — can\'t record.</string>
 
-    <string name="section_file_test">Phase 1 -- local file test</string>
-    <string name="btn_start_recording">Start Test Recording</string>
-    <string name="btn_stop_recording">Stop Recording</string>
-    <string name="btn_play">Play Last Recording</string>
-    <string name="btn_share">Share Last Recording</string>
-    <string name="status_recording">Recording… speak normally, then Stop.</string>
-    <string name="status_saved">Saved: %1$s</string>
-    <string name="status_failed">Recording failed: %1$s</string>
-    <string name="status_playing">Playing %1$s…</string>
-    <string name="status_playback_failed">Playback failed: %1$s</string>
-    <string name="share_chooser_title">Share test recording</string>
+    <string name="status_mic_denied">Mic permission denied — can\'t broadcast.</string>
 
-    <string name="section_live_test">Phase 4 -- interruption handling</string>
     <string name="btn_go_live">Go Live</string>
     <string name="btn_stop_live">Stop</string>
-    <string name="status_live_missing_secrets">secrets.properties missing or incomplete -- add azuracast.host / port / username / password to the project root secrets.properties and rebuild.</string>
+    <string name="status_live_missing_secrets">Not configured -- add azuracast.host / port / username / password to the project\'s secrets.properties and rebuild.</string>
     <string name="status_live_connecting">Connecting to %1$s:%2$d…</string>
-    <string name="status_live_on_air">Live -- check AzuraCast / the public stream now.</string>
+    <string name="status_live_on_air">Live</string>
     <string name="status_live_reconnecting">Reconnecting…</string>
-    <string name="status_live_stopped">Stopped.</string>
-    <string name="status_live_error">Live error: %1$s</string>
-    <string name="status_telemetry"> (reconnects: %1$d, drops: %2$d, sco-refused: %3$d)</string>
-    <string name="status_muted_suffix"> -- muted (call in progress)</string>
+    <string name="status_live_stopped">Offline.</string>
+    <string name="status_live_error">Error: %1$s</string>
+    <string name="status_muted_suffix"> (muted — call in progress)</string>
+
+    <string name="mic_level_label">Mic level</string>
+    <string name="mic_clipping_warning">Clipping — move back or speak softer</string>
+
+    <string name="elapsed_time_format">Elapsed: %1$s</string>
+
+    <string name="server_panel_title">Server (view-only)</string>
+    <string name="server_panel_host_port">%1$s : %2$d</string>
+    <string name="server_panel_not_configured">Not configured</string>
+
+    <string name="diagnostics_title">Diagnostics</string>
+    <string name="diagnostics_line">Reconnects: %1$d\nDropped frames: %2$d (%3$d bursts)\nQueue: %4$d/%5$d frames\nBitrate: %6$d kbps\nBuffering latency (est.): ~%7$d ms\nBluetooth SCO refused: %8$d times</string>
+
+    <string name="btn_view_log">View Debug Log</string>
+    <string name="btn_export_log">Export Log</string>
+    <string name="btn_close_log">Close</string>
+    <string name="log_title">Debug Log</string>
+    <string name="log_empty">No events yet.</string>
+    <string name="log_share_title">Share debug log</string>
+    <string name="log_exported">Exported: %1$s</string>
 
     <string name="notification_channel_name">Live broadcast</string>
 

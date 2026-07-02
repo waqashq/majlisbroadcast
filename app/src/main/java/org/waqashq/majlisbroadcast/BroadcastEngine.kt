@@ -35,7 +35,12 @@ class BroadcastEngine(
 
     interface Listener {
         fun onStateChanged(state: State, error: String?)
-        fun onTelemetry(dropCount: Long, reconnectCount: Int, scoRefusalCount: Int, focusLost: Boolean)
+        fun onTelemetry(
+            dropCount: Long, reconnectCount: Int, scoRefusalCount: Int, focusLost: Boolean,
+            queueDepth: Int, burstDropEvents: Int
+        )
+        /** level: 0-100 peak scale. Throttled to ~150ms; safe to call often. */
+        fun onLevelUpdate(level: Int, clipping: Boolean)
     }
 
     companion object {
@@ -100,6 +105,7 @@ class BroadcastEngine(
         if (running) return
         running = true
         queue.clear()
+        DebugLog.log("Engine starting")
         state = State.CONNECTING
 
         captureThread = Thread({ runCapture() }, "BroadcastEngine-capture").apply {
@@ -125,6 +131,7 @@ class BroadcastEngine(
         captureThread = null
         writerThread = null
         state = State.STOPPED
+        DebugLog.log("Engine stopped")
     }
 
     /**
@@ -133,6 +140,9 @@ class BroadcastEngine(
      * substitutes perfectly-timed silence so the harbor slot stays alive.
      */
     fun setFocusLost(lost: Boolean) {
+        if (focusLost != lost) {
+            DebugLog.log(if (lost) "Audio focus lost -- muting (call in progress)" else "Audio focus regained -- resuming mic")
+        }
         focusLost = lost
         reportTelemetry()
     }
@@ -144,6 +154,7 @@ class BroadcastEngine(
      * finding out up to ~8s later when an in-flight write times out.
      */
     fun notifyNetworkLost() {
+        DebugLog.log("Network lost -- forcing reconnect")
         currentUploader?.close()
     }
 
@@ -157,7 +168,18 @@ class BroadcastEngine(
     }
 
     private fun reportTelemetry() {
-        listener.onTelemetry(queue.totalDropped, reconnectCount, scoRefusalCount, focusLost)
+        listener.onTelemetry(
+            queue.totalDropped, reconnectCount, scoRefusalCount, focusLost,
+            queue.size(), queue.burstDropEvents
+        )
+    }
+
+    private var lastLevelReportMs = 0L
+    private fun reportLevel(level: Int, clipped: Boolean) {
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastLevelReportMs < 150) return
+        lastLevelReportMs = now
+        listener.onLevelUpdate(level, clipped)
     }
 
     // ================= Capture + encode thread =================
@@ -210,9 +232,13 @@ class BroadcastEngine(
                         read = pcmBuf.size
                         val pacingMs = (read / 2).toLong() * 1000L / SAMPLE_RATE
                         Thread.sleep(pacingMs)
+                        reportLevel(0, false)
                     } else {
                         read = audioRecord.read(pcmBuf, 0, pcmBuf.size, AudioRecord.READ_BLOCKING)
-                        if (read > 0) applyGain(pcmBuf, read)
+                        if (read > 0) {
+                            val (level, clipped) = applyGainAndMeasure(pcmBuf, read)
+                            reportLevel(level, clipped)
+                        }
                     }
                     val inputBuffer = codec.getInputBuffer(inIndex)
                     if (inputBuffer != null && read > 0) {
@@ -244,6 +270,7 @@ class BroadcastEngine(
             // recovery from a dead service/engine is user-initiated, not
             // automatic.
             lastError = "${t.javaClass.simpleName}: ${t.message}"
+            DebugLog.log("FATAL capture error: $lastError")
             running = false
             state = State.ERROR
         } finally {
@@ -255,19 +282,29 @@ class BroadcastEngine(
     }
 
     /**
-     * Boosts raw 16-bit little-endian PCM samples in place by GAIN_FACTOR,
-     * clamped to the valid Short range to avoid hard clipping distortion.
+     * Boosts raw 16-bit little-endian PCM samples in place by GAIN_FACTOR
+     * (clamped to avoid hard-clipping distortion), and in the same pass
+     * measures the buffer's peak level (0-100) and whether any sample
+     * actually hit the clamp -- feeds the UI's mic level/clipping meter
+     * (section 8) without a second pass over the buffer.
      */
-    private fun applyGain(buf: ByteArray, byteCount: Int) {
+    private fun applyGainAndMeasure(buf: ByteArray, byteCount: Int): Pair<Int, Boolean> {
+        var peak = 0
+        var clipped = false
         var i = 0
         while (i + 1 < byteCount) {
             val sample = ((buf[i + 1].toInt() shl 8) or (buf[i].toInt() and 0xFF)).toShort()
-            val boosted = (sample * GAIN_FACTOR).toInt()
-                .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
+            val rawBoosted = (sample * GAIN_FACTOR).toInt()
+            if (rawBoosted > Short.MAX_VALUE || rawBoosted < Short.MIN_VALUE) clipped = true
+            val boosted = rawBoosted.coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
             buf[i] = (boosted and 0xFF).toByte()
             buf[i + 1] = ((boosted shr 8) and 0xFF).toByte()
+            val abs = kotlin.math.abs(boosted)
+            if (abs > peak) peak = abs
             i += 2
         }
+        val level = (peak * 100 / Short.MAX_VALUE).coerceIn(0, 100)
+        return level to clipped
     }
 
     private fun createAudioRecord(bufferSize: Int): AudioRecord? {
@@ -313,6 +350,7 @@ class BroadcastEngine(
         try {
             if (record.routedDevice?.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO) {
                 scoRefusalCount++
+                DebugLog.log("Bluetooth SCO route detected -- refused, re-pinned to built-in mic (#$scoRefusalCount)")
                 reportTelemetry()
                 pinToBuiltInMic(record)
             }
@@ -409,6 +447,7 @@ class BroadcastEngine(
                     u.connectAndHandshake()
                     currentUploader = u
                     state = State.LIVE
+                    DebugLog.log("Connected -- live")
                     backoffMs = BACKOFF_MIN_MS
                 } catch (e: IOException) {
                     lastError = "${e.javaClass.simpleName}: ${e.message}"
@@ -418,6 +457,7 @@ class BroadcastEngine(
                     // shutting down.
                     if (running) {
                         reconnectCount++
+                        DebugLog.log("Connect failed: $lastError -- reconnecting (attempt $reconnectCount)")
                         reportTelemetry()
                         state = State.RECONNECTING
                         backoffMs = (backoffMs * 2).coerceAtMost(BACKOFF_MAX_MS)
@@ -449,6 +489,7 @@ class BroadcastEngine(
                 // which lands here. Don't flip to RECONNECTING for that.
                 if (running) {
                     reconnectCount++
+                    DebugLog.log("Write failed: $lastError -- reconnecting (attempt $reconnectCount)")
                     reportTelemetry()
                     state = State.RECONNECTING
                 }

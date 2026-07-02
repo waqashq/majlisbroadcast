@@ -3,147 +3,100 @@ package org.waqashq.majlisbroadcast
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.media.MediaPlayer
+import android.graphics.Color
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
+import android.os.SystemClock
 import android.provider.Settings
 import android.view.Gravity
+import android.view.View
 import android.widget.Button
 import android.widget.LinearLayout
+import android.widget.ProgressBar
+import android.widget.ScrollView
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
-import java.io.File
-import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.Locale
 
 /**
- * Test harness ONLY -- not the real app UI (see majlisbroadcast.md section 8
- * / Phase 5). Two independent sections: the Phase 1 local-file test, and the
- * live broadcast (via BroadcastService), which now also drives the Phase 4
- * first-run battery-optimization exemption prompt and shows Phase 4
- * telemetry (SCO refusals, muted/call state).
+ * Phase 5: the real (minimal) app UI -- see majlisbroadcast.md section 8.
+ * Go Live/Stop, status, mic level/clipping meter, elapsed time, a
+ * view-only server panel, lightweight diagnostics, and an exportable
+ * rolling debug log. Bilingual via res/values (English) and
+ * res/values-ur (Urdu); RTL is handled by the system since supportsRtl is
+ * set and nothing here hardcodes left/right.
+ *
+ * The Phase 1 local-file test harness (AacFileRecorder) is no longer wired
+ * into this screen -- it already served its purpose (validating capture/
+ * encode/ADTS offline) and section 8 wants the shipped UI to "stay bare."
+ * The class itself is left in the repo in case it's useful for future
+ * debugging.
  */
 class MainActivity : AppCompatActivity() {
 
     private val prefBatteryExemptionAsked = "battery_exemption_asked"
+    private val prefsName = "majlis_prefs"
 
-    // --- Phase 1: local file test ---
+    // Mirrors BroadcastEngine's private constants -- purely for display,
+    // update here too if those ever change.
+    private val queueCapacityDisplay = 150
+    private val configuredBitrateKbps = 64
+
     private lateinit var statusText: TextView
-    private lateinit var recordButton: Button
-    private lateinit var playButton: Button
-    private lateinit var shareButton: Button
-
-    private var recorder: AacFileRecorder? = null
-    private var isRecording = false
-    private var lastFile: File? = null
-    private var mediaPlayer: MediaPlayer? = null
-
-    // --- Phase 3: live broadcast service ---
-    private lateinit var liveStatusText: TextView
     private lateinit var goLiveButton: Button
+    private lateinit var elapsedText: TextView
+    private lateinit var micLevelBar: ProgressBar
+    private lateinit var micClippingText: TextView
+    private lateinit var serverPanelText: TextView
+    private lateinit var diagnosticsText: TextView
+    private lateinit var batteryStateLabel: TextView
+    private lateinit var versionLabel: TextView
+
     private var isLive = false
     private val uiHandler = Handler(Looper.getMainLooper())
     private val livePoller = object : Runnable {
         override fun run() {
             pollLiveState()
-            // Only reschedule while still live -- pollLiveState() flips
-            // isLive to false once it sees STOPPED/IDLE, and rescheduling
-            // unconditionally here would silently undo that and poll
-            // forever in the background.
-            if (isLive) {
-                uiHandler.postDelayed(this, 500)
-            }
+            if (isLive) uiHandler.postDelayed(this, 300)
         }
     }
 
     private val requestMicPermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
-        if (!granted) statusText.text = getString(R.string.status_mic_denied)
+        if (granted) proceedWithFirstRunChecks() else statusText.text = getString(R.string.status_mic_denied)
     }
 
     private val requestNotificationPermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
-    ) { /* proceed regardless -- the FGS still runs, the notification just won't show without it */ }
+    ) { /* proceed regardless -- the FGS still runs, the notification just won't show without it */
+        proceedWithFirstRunChecks()
+    }
 
     private val requestBatteryExemption = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
-    ) { /* proceed regardless of the user's choice -- just re-check next time Go Live is tapped */ }
+    ) { /* proceed regardless of the user's choice */
+        proceedWithFirstRunChecks()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        buildUi()
+        DebugLog.log("App opened")
 
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            setPadding(48, 48, 48, 48)
-        }
-
-        // --- Phase 1 section ---
-        val fileSectionLabel = TextView(this).apply { text = getString(R.string.section_file_test); textSize = 14f }
-        statusText = TextView(this).apply { text = getString(R.string.status_ready); textSize = 16f }
-        recordButton = Button(this).apply { text = getString(R.string.btn_start_recording) }
-        playButton = Button(this).apply { text = getString(R.string.btn_play); isEnabled = false }
-        shareButton = Button(this).apply { text = getString(R.string.btn_share); isEnabled = false }
-
-        recordButton.setOnClickListener { onRecordClicked() }
-        playButton.setOnClickListener { onPlayClicked() }
-        shareButton.setOnClickListener { onShareClicked() }
-
-        // --- Phase 3 section ---
-        val liveSectionLabel = TextView(this).apply { text = getString(R.string.section_live_test); textSize = 14f }
-        liveStatusText = TextView(this).apply { text = ""; textSize = 16f }
-        goLiveButton = Button(this).apply { text = getString(R.string.btn_go_live) }
-        goLiveButton.setOnClickListener { onGoLiveClicked() }
-
-        // Shown so you can confirm which build is actually installed --
-        // bumped on every code push, see README.
-        val versionLabel = TextView(this).apply {
-            text = getString(R.string.build_version, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE)
-            textSize = 12f
-            alpha = 0.6f
-        }
-
-        // Diagnostic only -- makes the actual OS-level state visible
-        // instead of having to dig through OEM battery-settings menus to
-        // confirm whether the exemption prompt actually needs to fire.
-        val batteryStateLabel = TextView(this).apply {
-            val ignoring = (getSystemService(POWER_SERVICE) as PowerManager).isIgnoringBatteryOptimizations(packageName)
-            text = getString(if (ignoring) R.string.battery_state_ignoring else R.string.battery_state_not_ignoring)
-            textSize = 12f
-            alpha = 0.6f
-        }
-
-        listOf(
-            fileSectionLabel, statusText, recordButton, playButton, shareButton,
-            liveSectionLabel, liveStatusText, goLiveButton, versionLabel, batteryStateLabel
-        ).forEach {
-            root.addView(
-                it,
-                LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.WRAP_CONTENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
-                ).apply { topMargin = 24 }
-            )
-        }
-
-        setContentView(root)
-
-        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            requestMicPermission.launch(Manifest.permission.RECORD_AUDIO)
-        }
+        // First-run permission chain fires immediately on open, not just
+        // when Go Live is tapped (section 7: "First-run: request...").
+        proceedWithFirstRunChecks()
 
         // If the service is already live from before this Activity was
-        // (re)created (e.g. screen rotation, or returning to the app while
-        // broadcasting in the background), reflect that immediately instead
-        // of showing a stale "Go Live" button.
+        // (re)created, reflect that immediately instead of a stale button.
         if (BroadcastService.state == BroadcastEngine.State.LIVE ||
             BroadcastService.state == BroadcastEngine.State.CONNECTING ||
             BroadcastService.state == BroadcastEngine.State.RECONNECTING
@@ -154,71 +107,107 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // ================= Phase 1: local file test =================
-
-    private fun onRecordClicked() {
-        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            requestMicPermission.launch(Manifest.permission.RECORD_AUDIO)
-            return
+    private fun buildUi() {
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(48, 64, 48, 48)
         }
 
-        if (!isRecording) {
-            val dir = File(getExternalFilesDir(null), "recordings")
-            dir.mkdirs()
-            val name = "test_" + SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date()) + ".aac"
-            val file = File(dir, name)
+        statusText = TextView(this).apply {
+            textSize = 20f
+            gravity = Gravity.CENTER
+        }
+        goLiveButton = Button(this).apply {
+            text = getString(R.string.btn_go_live)
+            textSize = 18f
+        }
+        goLiveButton.setOnClickListener { onGoLiveClicked() }
 
-            recorder = AacFileRecorder(file).also { it.start() }
-            lastFile = file
-            isRecording = true
-            recordButton.text = getString(R.string.btn_stop_recording)
-            statusText.text = getString(R.string.status_recording)
-            playButton.isEnabled = false
-            shareButton.isEnabled = false
+        elapsedText = TextView(this).apply { textSize = 14f }
+
+        val micLevelLabel = TextView(this).apply {
+            text = getString(R.string.mic_level_label)
+            textSize = 12f
+        }
+        micLevelBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+            max = 100
+            progress = 0
+        }
+        micClippingText = TextView(this).apply {
+            text = getString(R.string.mic_clipping_warning)
+            textSize = 12f
+            setTextColor(Color.RED)
+            visibility = View.GONE
+        }
+
+        serverPanelText = TextView(this).apply {
+            textSize = 12f
+            alpha = 0.8f
+            gravity = Gravity.CENTER
+        }
+
+        diagnosticsText = TextView(this).apply {
+            textSize = 11f
+            alpha = 0.7f
+            gravity = Gravity.CENTER
+        }
+
+        val viewLogButton = Button(this).apply {
+            text = getString(R.string.btn_view_log)
+            textSize = 11f
+        }
+        viewLogButton.setOnClickListener { showDebugLogDialog() }
+
+        batteryStateLabel = TextView(this).apply { textSize = 11f; alpha = 0.6f }
+        versionLabel = TextView(this).apply { textSize = 11f; alpha = 0.6f }
+
+        listOf(
+            statusText, goLiveButton, elapsedText,
+            micLevelLabel, micLevelBar, micClippingText,
+            serverPanelText, diagnosticsText, viewLogButton,
+            batteryStateLabel, versionLabel
+        ).forEach {
+            root.addView(
+                it,
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { topMargin = 20 }
+            )
+        }
+        // Horizontal ProgressBar needs an explicit width -- WRAP_CONTENT
+        // collapses it to almost nothing.
+        micLevelBar.layoutParams = LinearLayout.LayoutParams(600, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+            topMargin = 8
+        }
+
+        setContentView(ScrollView(this).apply { addView(root) })
+
+        refreshStaticInfo()
+    }
+
+    private fun refreshStaticInfo() {
+        if (!isLive) statusText.text = getString(R.string.status_live_stopped)
+
+        val serverLine = if (BuildConfig.AZURACAST_HOST.isNotBlank()) {
+            getString(R.string.server_panel_host_port, BuildConfig.AZURACAST_HOST, BuildConfig.AZURACAST_PORT)
         } else {
-            recorder?.stop()
-            val error = recorder?.lastError
-            isRecording = false
-            recordButton.text = getString(R.string.btn_start_recording)
-            if (error != null) {
-                statusText.text = getString(R.string.status_failed, error)
-            } else {
-                statusText.text = getString(R.string.status_saved, lastFile?.name)
-                playButton.isEnabled = true
-                shareButton.isEnabled = true
-            }
+            getString(R.string.server_panel_not_configured)
         }
+        serverPanelText.text = getString(R.string.server_panel_title) + "\n" + serverLine
+
+        versionLabel.text = getString(R.string.build_version, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE)
+
+        val ignoring = (getSystemService(POWER_SERVICE) as PowerManager).isIgnoringBatteryOptimizations(packageName)
+        batteryStateLabel.text = getString(
+            if (ignoring) R.string.battery_state_ignoring else R.string.battery_state_not_ignoring
+        )
     }
 
-    private fun onPlayClicked() {
-        val file = lastFile ?: return
-        try {
-            mediaPlayer?.release()
-            mediaPlayer = MediaPlayer().apply {
-                setDataSource(file.absolutePath)
-                prepare()
-                start()
-            }
-            statusText.text = getString(R.string.status_playing, file.name)
-        } catch (t: Throwable) {
-            statusText.text = getString(R.string.status_playback_failed, t.message)
-        }
-    }
+    // ================= First-run permission chain (section 7) =================
 
-    private fun onShareClicked() {
-        val file = lastFile ?: return
-        val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
-        val intent = Intent(Intent.ACTION_SEND).apply {
-            type = "audio/aac"
-            putExtra(Intent.EXTRA_STREAM, uri)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-        startActivity(Intent.createChooser(intent, getString(R.string.share_chooser_title)))
-    }
-
-    // ================= Phase 3: live broadcast service =================
-
-    private fun onGoLiveClicked() {
+    private fun proceedWithFirstRunChecks() {
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             requestMicPermission.launch(Manifest.permission.RECORD_AUDIO)
             return
@@ -229,13 +218,7 @@ class MainActivity : AppCompatActivity() {
             requestNotificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
             return
         }
-        // Section 7: without this exemption, the CPU can park mid-broadcast
-        // on aggressive OEMs regardless of the foreground service. This is a
-        // FIRST-RUN prompt only (per section 7's wording) -- if the user
-        // dismisses or declines it, we don't nag on every Go Live tap; they
-        // can still grant it later from system Settings if they hit
-        // reliability problems.
-        val prefs = getSharedPreferences("majlis_prefs", MODE_PRIVATE)
+        val prefs = getSharedPreferences(prefsName, MODE_PRIVATE)
         val powerManager = getSystemService(POWER_SERVICE) as PowerManager
         if (!prefs.getBoolean(prefBatteryExemptionAsked, false) &&
             !powerManager.isIgnoringBatteryOptimizations(packageName)
@@ -248,8 +231,7 @@ class MainActivity : AppCompatActivity() {
                 requestBatteryExemption.launch(intent)
             } catch (_: Throwable) {
                 // Some OEM skins don't implement this standard intent --
-                // fall back to the app's own settings page so the user can
-                // still find battery options manually if needed.
+                // fall back to the app's own settings page.
                 try {
                     startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
                         data = Uri.parse("package:$packageName")
@@ -259,65 +241,137 @@ class MainActivity : AppCompatActivity() {
             }
             return
         }
+        refreshStaticInfo()
+    }
+
+    // ================= Go Live =================
+
+    private fun onGoLiveClicked() {
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            proceedWithFirstRunChecks()
+            return
+        }
 
         if (!isLive) {
             if (BuildConfig.AZURACAST_HOST.isBlank() || BuildConfig.AZURACAST_PORT == 0) {
-                liveStatusText.text = getString(R.string.status_live_missing_secrets)
+                statusText.text = getString(R.string.status_live_missing_secrets)
                 return
             }
+            DebugLog.log("Go Live tapped")
             BroadcastService.start(this)
             isLive = true
             goLiveButton.text = getString(R.string.btn_stop_live)
-            liveStatusText.text = getString(
+            statusText.text = getString(
                 R.string.status_live_connecting, BuildConfig.AZURACAST_HOST, BuildConfig.AZURACAST_PORT
             )
             uiHandler.post(livePoller)
         } else {
+            DebugLog.log("Stop tapped")
             BroadcastService.stop(this)
             isLive = false
             goLiveButton.text = getString(R.string.btn_go_live)
-            liveStatusText.text = getString(R.string.status_live_stopped)
+            statusText.text = getString(R.string.status_live_stopped)
+            elapsedText.text = ""
             uiHandler.removeCallbacks(livePoller)
         }
     }
 
     private fun pollLiveState() {
-        val telemetry = getString(
-            R.string.status_telemetry,
-            BroadcastService.reconnectCount, BroadcastService.dropCount, BroadcastService.scoRefusalCount
-        )
-        val muted = if (BroadcastService.focusLost) getString(R.string.status_muted_suffix) else ""
         when (BroadcastService.state) {
-            BroadcastEngine.State.CONNECTING -> liveStatusText.text = getString(
+            BroadcastEngine.State.CONNECTING -> statusText.text = getString(
                 R.string.status_live_connecting, BuildConfig.AZURACAST_HOST, BuildConfig.AZURACAST_PORT
             )
-            BroadcastEngine.State.LIVE -> liveStatusText.text = getString(R.string.status_live_on_air) + muted + telemetry
-            BroadcastEngine.State.RECONNECTING -> liveStatusText.text = getString(R.string.status_live_reconnecting) + telemetry
-            BroadcastEngine.State.ERROR -> {
-                liveStatusText.text = getString(R.string.status_live_error, BroadcastService.lastError ?: "unknown")
+            BroadcastEngine.State.LIVE -> {
+                val muted = if (BroadcastService.focusLost) getString(R.string.status_muted_suffix) else ""
+                statusText.text = getString(R.string.status_live_on_air) + muted
             }
+            BroadcastEngine.State.RECONNECTING -> statusText.text = getString(R.string.status_live_reconnecting)
+            BroadcastEngine.State.ERROR -> statusText.text = getString(
+                R.string.status_live_error, BroadcastService.lastError ?: "unknown"
+            )
             BroadcastEngine.State.STOPPED, BroadcastEngine.State.IDLE -> {
                 if (isLive) {
                     isLive = false
                     goLiveButton.text = getString(R.string.btn_go_live)
-                    // This branch also covers an EXTERNAL stop (e.g. the
-                    // notification's own Stop action) -- the in-app Stop
-                    // button already sets this text itself, but that path
-                    // never runs when the notification is used instead.
-                    liveStatusText.text = getString(R.string.status_live_stopped)
+                    statusText.text = getString(R.string.status_live_stopped)
+                    elapsedText.text = ""
                     uiHandler.removeCallbacks(livePoller)
                 }
             }
         }
+
+        if (BroadcastService.sessionStartRealtime > 0) {
+            val elapsedSec = (SystemClock.elapsedRealtime() - BroadcastService.sessionStartRealtime) / 1000
+            elapsedText.text = getString(R.string.elapsed_time_format, formatElapsed(elapsedSec))
+        }
+
+        micLevelBar.progress = BroadcastService.micLevel
+        micClippingText.visibility = if (BroadcastService.micClipping) View.VISIBLE else View.GONE
+
+        // Buffering-latency estimate: how long audio currently sits in our
+        // own queue + the coalescing window -- NOT true end-to-end/network
+        // latency, which we have no way to measure without server support.
+        val latencyEstimateMs = (BroadcastService.queueDepth * 23) + 200
+        diagnosticsText.text = getString(R.string.diagnostics_title) + "\n" + getString(
+            R.string.diagnostics_line,
+            BroadcastService.reconnectCount,
+            BroadcastService.dropCount,
+            BroadcastService.burstDropEvents,
+            BroadcastService.queueDepth, queueCapacityDisplay,
+            configuredBitrateKbps,
+            latencyEstimateMs,
+            BroadcastService.scoRefusalCount
+        )
+    }
+
+    private fun formatElapsed(totalSeconds: Long): String {
+        val h = totalSeconds / 3600
+        val m = (totalSeconds % 3600) / 60
+        val s = totalSeconds % 60
+        return if (h > 0) {
+            String.format(Locale.US, "%d:%02d:%02d", h, m, s)
+        } else {
+            String.format(Locale.US, "%02d:%02d", m, s)
+        }
+    }
+
+    // ================= Debug log (section 9) =================
+
+    private fun showDebugLogDialog() {
+        val lines = DebugLog.snapshot()
+        val text = if (lines.isEmpty()) getString(R.string.log_empty) else lines.joinToString("\n")
+
+        val logView = TextView(this).apply {
+            this.text = text
+            textSize = 12f
+            setPadding(32, 32, 32, 32)
+        }
+        val scroll = ScrollView(this).apply { addView(logView) }
+
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.log_title))
+            .setView(scroll)
+            .setPositiveButton(getString(R.string.btn_export_log)) { _, _ -> exportDebugLog() }
+            .setNegativeButton(getString(R.string.btn_close_log), null)
+            .show()
+    }
+
+    private fun exportDebugLog() {
+        val file = DebugLog.export(this)
+        android.widget.Toast.makeText(this, getString(R.string.log_exported, file.name), android.widget.Toast.LENGTH_SHORT).show()
+        val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        startActivity(Intent.createChooser(intent, getString(R.string.log_share_title)))
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        mediaPlayer?.release()
-        recorder?.stop()
         uiHandler.removeCallbacks(livePoller)
-        // Note: the broadcast service is NOT stopped here -- it's meant to
-        // keep running in the background after the Activity goes away.
-        // Only the explicit Stop button (-> BroadcastService.stop()) ends it.
+        // The broadcast service is NOT stopped here -- it keeps running in
+        // the background. Only the explicit Stop control ends it.
     }
 }

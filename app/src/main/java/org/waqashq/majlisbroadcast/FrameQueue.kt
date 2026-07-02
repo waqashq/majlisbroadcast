@@ -26,6 +26,10 @@ class FrameQueue(private val capacityFrames: Int) {
     @Volatile var totalDropped: Long = 0
         private set
 
+    /** Number of overflow EVENTS (each may drop several frames at once), not the frame count itself. */
+    @Volatile var burstDropEvents: Int = 0
+        private set
+
     fun offer(frame: ByteArray) {
         lock.withLock {
             if (deque.size >= capacityFrames) {
@@ -35,6 +39,8 @@ class FrameQueue(private val capacityFrames: Int) {
                     dropped++
                 }
                 totalDropped += dropped
+                burstDropEvents++
+                DebugLog.log("Queue overflow: dropped $dropped frames (burst #$burstDropEvents)")
             }
             deque.addLast(frame)
             notEmpty.signal()

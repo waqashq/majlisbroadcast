@@ -22,4 +22,4 @@ ever committed by accident, stop and rotate the AzuraCast source password.
 ## Status
 
 Building in strict phase order per `majlisbroadcast.md` section 12.
-Currently: Phase 4 (interruption handling) -- Phases 0, 0.5 Gate 1, 1, 2, and 3 complete.
+Currently: Phase 5 (UI + observability) -- Phases 0, 0.5 Gate 1, 1, 2, 3, and 4 complete.
