@@ -479,7 +479,17 @@ class BroadcastEngine(
                         DebugLog.log("Connect failed: $lastError -- reconnecting (attempt $reconnectCount)")
                         reportTelemetry()
                         state = State.RECONNECTING
-                        backoffMs = (backoffMs * 2).coerceAtMost(BACKOFF_MAX_MS)
+                        if (lastError?.contains("Mountpoint already taken") == true) {
+                            // The server has told us directly the old mount
+                            // isn't free yet -- doubling from BACKOFF_MIN_MS
+                            // just wastes one or two more guaranteed-to-fail
+                            // cycles (each one its own brief on-air blip on
+                            // the eventual reconnect). Jump straight to the
+                            // ceiling instead of ramping up to it.
+                            backoffMs = BACKOFF_MAX_MS
+                        } else {
+                            backoffMs = (backoffMs * 2).coerceAtMost(BACKOFF_MAX_MS)
+                        }
                     }
                     continue
                 }

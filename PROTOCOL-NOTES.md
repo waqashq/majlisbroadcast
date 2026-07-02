@@ -70,3 +70,19 @@ log after this fix, the more durable fix is lowering the source/read
 timeout on the AzuraCast/Liquidsoap harbor side so it notices a dead
 connection sooner.
 
+**2026-07-03 follow-up:** a second long-run test (Wi-Fi -> mobile data
+handover) needed the *full* ~40s backoff step to succeed -- even a ~20s
+attempt was still rejected with 403. Liquidsoap's `harbor.timeout` defaults
+to 30s; AzuraCast's actual configured value (and any of its own supervisor
+overhead on top) may run longer than that default. This is adjustable via
+Station -> Broadcasting -> "Edit Liquidsoap Configuration" (custom code box
+at the bottom of that page) but requires hand-written Liquidsoap and hasn't
+been attempted yet -- flagged as a possible future server-side change, not
+done as of this note.
+
+App-side, `BroadcastEngine.kt` now special-cases a "Mountpoint already
+taken" rejection specifically: instead of doubling up through the backoff
+ladder (which we now know just wastes 1-2 guaranteed-to-fail cycles once
+the server has already told us the mount is still held), it jumps straight
+to `BACKOFF_MAX_MS` on that specific error.
+
