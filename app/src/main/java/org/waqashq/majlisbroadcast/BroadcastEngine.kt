@@ -60,6 +60,14 @@ class BroadcastEngine(
         // window instead of spamming reconnects (section 5).
         private const val BACKOFF_MIN_MS = 10_000L
         private const val BACKOFF_MAX_MS = 30_000L
+
+        // UNPROCESSED deliberately has no AGC (that's what keeps voice full
+        // instead of thin -- see section 3), but that also means no
+        // automatic loudness boost the way MIC-source apps get. This
+        // manual gain compensates. ~4x (~12dB) is a starting point based on
+        // on-device comparison against AGC'd apps; adjust to taste. Clamped
+        // to avoid hard digital clipping on loud peaks.
+        private const val GAIN_FACTOR = 4.0f
     }
 
     @Volatile private var running = false
@@ -153,6 +161,7 @@ class BroadcastEngine(
                     val read = audioRecord.read(pcmBuf, 0, pcmBuf.size, AudioRecord.READ_BLOCKING)
                     val inputBuffer = codec.getInputBuffer(inIndex)
                     if (inputBuffer != null && read > 0) {
+                        applyGain(pcmBuf, read)
                         inputBuffer.clear()
                         inputBuffer.put(pcmBuf, 0, read)
                         val ptsUs = sampleCount * 1_000_000L / SAMPLE_RATE
@@ -188,6 +197,22 @@ class BroadcastEngine(
             audioRecord?.release()
             try { codec?.stop() } catch (_: Throwable) {}
             codec?.release()
+        }
+    }
+
+    /**
+     * Boosts raw 16-bit little-endian PCM samples in place by GAIN_FACTOR,
+     * clamped to the valid Short range to avoid hard clipping distortion.
+     */
+    private fun applyGain(buf: ByteArray, byteCount: Int) {
+        var i = 0
+        while (i + 1 < byteCount) {
+            val sample = ((buf[i + 1].toInt() shl 8) or (buf[i].toInt() and 0xFF)).toShort()
+            val boosted = (sample * GAIN_FACTOR).toInt()
+                .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
+            buf[i] = (boosted and 0xFF).toByte()
+            buf[i + 1] = ((boosted shr 8) and 0xFF).toByte()
+            i += 2
         }
     }
 

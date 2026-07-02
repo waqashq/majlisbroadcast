@@ -36,6 +36,10 @@ class AacFileRecorder(private val outputFile: File) {
             96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050,
             16000, 12000, 11025, 8000, 7350
         )
+
+        // See BroadcastEngine's GAIN_FACTOR doc -- same reasoning, kept
+        // consistent between the two test harnesses.
+        private const val GAIN_FACTOR = 4.0f
     }
 
     @Volatile
@@ -120,6 +124,7 @@ class AacFileRecorder(private val outputFile: File) {
                     val read = audioRecord.read(pcmBuf, 0, pcmBuf.size, AudioRecord.READ_BLOCKING)
                     val inputBuffer = codec.getInputBuffer(inIndex)
                     if (inputBuffer != null && read > 0) {
+                        applyGain(pcmBuf, read)
                         inputBuffer.clear()
                         inputBuffer.put(pcmBuf, 0, read)
                         val ptsUs = sampleCount * 1_000_000L / SAMPLE_RATE
@@ -158,6 +163,22 @@ class AacFileRecorder(private val outputFile: File) {
     }
 
     /** UNPROCESSED preferred; CAMCORDER fallback. Never MIC -- its AGC/high-pass thins out voice. */
+    /**
+     * Boosts raw 16-bit little-endian PCM samples in place by GAIN_FACTOR,
+     * clamped to the valid Short range to avoid hard clipping distortion.
+     */
+    private fun applyGain(buf: ByteArray, byteCount: Int) {
+        var i = 0
+        while (i + 1 < byteCount) {
+            val sample = ((buf[i + 1].toInt() shl 8) or (buf[i].toInt() and 0xFF)).toShort()
+            val boosted = (sample * GAIN_FACTOR).toInt()
+                .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
+            buf[i] = (boosted and 0xFF).toByte()
+            buf[i + 1] = ((boosted shr 8) and 0xFF).toByte()
+            i += 2
+        }
+    }
+
     private fun createAudioRecord(bufferSize: Int): AudioRecord? {
         for (source in intArrayOf(MediaRecorder.AudioSource.UNPROCESSED, MediaRecorder.AudioSource.CAMCORDER)) {
             try {

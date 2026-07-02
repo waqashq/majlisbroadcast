@@ -47,7 +47,13 @@ class MainActivity : AppCompatActivity() {
     private val livePoller = object : Runnable {
         override fun run() {
             pollLiveState()
-            uiHandler.postDelayed(this, 500)
+            // Only reschedule while still live -- pollLiveState() flips
+            // isLive to false once it sees STOPPED/IDLE, and rescheduling
+            // unconditionally here would silently undo that and poll
+            // forever in the background.
+            if (isLive) {
+                uiHandler.postDelayed(this, 500)
+            }
         }
     }
 
@@ -232,6 +238,11 @@ class MainActivity : AppCompatActivity() {
                 if (isLive) {
                     isLive = false
                     goLiveButton.text = getString(R.string.btn_go_live)
+                    // This branch also covers an EXTERNAL stop (e.g. the
+                    // notification's own Stop action) -- the in-app Stop
+                    // button already sets this text itself, but that path
+                    // never runs when the notification is used instead.
+                    liveStatusText.text = getString(R.string.status_live_stopped)
                     uiHandler.removeCallbacks(livePoller)
                 }
             }
