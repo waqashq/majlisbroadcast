@@ -1,6 +1,8 @@
 package org.waqashq.majlisbroadcast
 
+import android.media.AudioDeviceInfo
 import android.media.AudioFormat
+import android.media.AudioManager
 import android.media.AudioRecord
 import android.media.MediaCodec
 import android.media.MediaCodecInfo
@@ -26,13 +28,14 @@ class BroadcastEngine(
     private val port: Int,
     private val username: String,
     private val password: String,
+    private val audioManager: AudioManager,
     private val listener: Listener
 ) {
     enum class State { IDLE, CONNECTING, LIVE, RECONNECTING, STOPPED, ERROR }
 
     interface Listener {
         fun onStateChanged(state: State, error: String?)
-        fun onTelemetry(dropCount: Long, reconnectCount: Int)
+        fun onTelemetry(dropCount: Long, reconnectCount: Int, scoRefusalCount: Int, focusLost: Boolean)
     }
 
     companion object {
@@ -76,6 +79,9 @@ class BroadcastEngine(
     private val queue = FrameQueue(QUEUE_CAPACITY_FRAMES)
 
     @Volatile private var reconnectCount = 0
+    @Volatile private var scoRefusalCount = 0
+    @Volatile private var focusLost = false
+    @Volatile private var networkAvailableSignal = false
     @Volatile private var lastError: String? = null
     @Volatile private var currentUploader: IcecastUploader? = null
 
@@ -121,6 +127,39 @@ class BroadcastEngine(
         state = State.STOPPED
     }
 
+    /**
+     * Called by the Service's audio-focus listener. Section 6: on focus
+     * loss (e.g. a phone call), don't disconnect -- the capture thread
+     * substitutes perfectly-timed silence so the harbor slot stays alive.
+     */
+    fun setFocusLost(lost: Boolean) {
+        focusLost = lost
+        reportTelemetry()
+    }
+
+    /**
+     * Called by the Service's ConnectivityManager callback when the active
+     * network is lost. Force-closes the socket immediately so the writer
+     * thread notices and starts reconnecting right away, instead of only
+     * finding out up to ~8s later when an in-flight write times out.
+     */
+    fun notifyNetworkLost() {
+        currentUploader?.close()
+    }
+
+    /**
+     * Called when a new network becomes available. If the writer thread is
+     * mid-backoff, this wakes it early to retry sooner rather than waiting
+     * out the rest of an already-scheduled delay.
+     */
+    fun notifyNetworkAvailable() {
+        networkAvailableSignal = true
+    }
+
+    private fun reportTelemetry() {
+        listener.onTelemetry(queue.totalDropped, reconnectCount, scoRefusalCount, focusLost)
+    }
+
     // ================= Capture + encode thread =================
 
     private fun runCapture() {
@@ -151,6 +190,7 @@ class BroadcastEngine(
             }
 
             audioRecord.startRecording()
+            checkRoutedDevice(audioRecord)
 
             val pcmBuf = ByteArray(bufferSize)
             val bufferInfo = MediaCodec.BufferInfo()
@@ -158,10 +198,24 @@ class BroadcastEngine(
             while (running) {
                 val inIndex = codec.dequeueInputBuffer(10_000)
                 if (inIndex >= 0) {
-                    val read = audioRecord.read(pcmBuf, 0, pcmBuf.size, AudioRecord.READ_BLOCKING)
+                    val read: Int
+                    if (focusLost) {
+                        // Phone call / focus loss (section 6): don't touch a
+                        // mic telephony may have claimed exclusively.
+                        // Synthesize perfectly-timed silence instead, paced
+                        // to real time so the sample clock stays continuous
+                        // and the harbor slot stays alive without a
+                        // reconnect.
+                        java.util.Arrays.fill(pcmBuf, 0.toByte())
+                        read = pcmBuf.size
+                        val pacingMs = (read / 2).toLong() * 1000L / SAMPLE_RATE
+                        Thread.sleep(pacingMs)
+                    } else {
+                        read = audioRecord.read(pcmBuf, 0, pcmBuf.size, AudioRecord.READ_BLOCKING)
+                        if (read > 0) applyGain(pcmBuf, read)
+                    }
                     val inputBuffer = codec.getInputBuffer(inIndex)
                     if (inputBuffer != null && read > 0) {
-                        applyGain(pcmBuf, read)
                         inputBuffer.clear()
                         inputBuffer.put(pcmBuf, 0, read)
                         val ptsUs = sampleCount * 1_000_000L / SAMPLE_RATE
@@ -223,13 +277,47 @@ class BroadcastEngine(
                     source, SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO,
                     AudioFormat.ENCODING_PCM_16BIT, bufferSize
                 )
-                if (record.state == AudioRecord.STATE_INITIALIZED) return record
+                if (record.state == AudioRecord.STATE_INITIALIZED) {
+                    pinToBuiltInMic(record)
+                    return record
+                }
                 record.release()
             } catch (_: Throwable) {
                 // try next source
             }
         }
         return null
+    }
+
+    /**
+     * Section 6 v1 policy: refuse a Bluetooth SCO route (forced 8/16kHz,
+     * would pitch/scramble a 44.1kHz encoder) and stay on the built-in mic,
+     * rather than reconfigure live. Proactively pins the preferred input
+     * device before recording starts, which is the direct way to prevent
+     * the system from ever routing this AudioRecord to SCO in the first
+     * place.
+     */
+    private fun pinToBuiltInMic(record: AudioRecord) {
+        try {
+            val builtInMic = audioManager.getDevices(AudioManager.GET_DEVICES_INPUTS)
+                .firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_MIC }
+            builtInMic?.let { record.setPreferredDevice(it) }
+        } catch (_: Throwable) {
+            // Best-effort -- if this fails, checkRoutedDevice() after
+            // startRecording() still catches an actual SCO route.
+        }
+    }
+
+    /** Defensive check after startRecording(): confirms we didn't end up on SCO anyway. */
+    private fun checkRoutedDevice(record: AudioRecord) {
+        try {
+            if (record.routedDevice?.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO) {
+                scoRefusalCount++
+                reportTelemetry()
+                pinToBuiltInMic(record)
+            }
+        } catch (_: Throwable) {
+        }
     }
 
     private fun drainEncoder(codec: MediaCodec, info: MediaCodec.BufferInfo, waitForEos: Boolean) {
@@ -304,6 +392,14 @@ class BroadcastEngine(
                 if (state == State.RECONNECTING) {
                     val deadline = SystemClock.elapsedRealtime() + backoffMs
                     while (running && SystemClock.elapsedRealtime() < deadline) {
+                        if (networkAvailableSignal) {
+                            // A new network just appeared -- retry now
+                            // instead of waiting out the rest of the
+                            // backoff (section 7: ConnectivityManager
+                            // drives reconnect on handover).
+                            networkAvailableSignal = false
+                            break
+                        }
                         Thread.sleep(200)
                     }
                     if (!running) break
@@ -317,7 +413,7 @@ class BroadcastEngine(
                 } catch (e: IOException) {
                     lastError = "${e.javaClass.simpleName}: ${e.message}"
                     reconnectCount++
-                    listener.onTelemetry(queue.totalDropped, reconnectCount)
+                    reportTelemetry()
                     state = State.RECONNECTING
                     backoffMs = (backoffMs * 2).coerceAtMost(BACKOFF_MAX_MS)
                     continue
@@ -344,7 +440,7 @@ class BroadcastEngine(
                 currentUploader?.close()
                 currentUploader = null
                 reconnectCount++
-                listener.onTelemetry(queue.totalDropped, reconnectCount)
+                reportTelemetry()
                 state = State.RECONNECTING
             }
         }

@@ -8,6 +8,13 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.media.AudioManager
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.net.wifi.WifiManager
 import android.os.IBinder
 import android.os.PowerManager
@@ -16,8 +23,10 @@ import androidx.core.app.ServiceCompat
 
 /**
  * Typed `microphone` foreground service: owns the BroadcastEngine, the
- * persistent notification (with Stop), and the wake/wifi locks. See
- * majlisbroadcast.md sections 5 and 7.
+ * persistent notification (with Stop), the wake/wifi locks, and (Phase 4)
+ * the OS-level interruption listeners -- ConnectivityManager for network
+ * handover and AudioManager focus for phone calls. See majlisbroadcast.md
+ * sections 5, 6, and 7.
  *
  * Deliberately NOT bound/IBinder-based -- MainActivity talks to it only via
  * the static start()/stop() helpers and polls the companion state, same
@@ -39,6 +48,10 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
             private set
         @Volatile var reconnectCount: Int = 0
             private set
+        @Volatile var scoRefusalCount: Int = 0
+            private set
+        @Volatile var focusLost: Boolean = false
+            private set
 
         fun start(context: Context) {
             val intent = Intent(context, BroadcastService::class.java)
@@ -54,6 +67,20 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
     private var engine: BroadcastEngine? = null
     private var wakeLock: PowerManager.WakeLock? = null
     private var wifiLock: WifiManager.WifiLock? = null
+
+    private var connectivityManager: ConnectivityManager? = null
+    private var networkCallback: ConnectivityManager.NetworkCallback? = null
+
+    private var audioManager: AudioManager? = null
+    private var focusRequest: AudioFocusRequest? = null
+    private val focusChangeListener = AudioManager.OnAudioFocusChangeListener { change ->
+        when (change) {
+            AudioManager.AUDIOFOCUS_LOSS,
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT,
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> engine?.setFocusLost(true)
+            AudioManager.AUDIOFOCUS_GAIN -> engine?.setFocusLost(false)
+        }
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -75,13 +102,20 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
             )
             acquireLocks()
 
+            val am = getSystemService(AUDIO_SERVICE) as AudioManager
+            audioManager = am
+
             engine = BroadcastEngine(
                 BuildConfig.AZURACAST_HOST,
                 BuildConfig.AZURACAST_PORT,
                 BuildConfig.AZURACAST_USERNAME,
                 BuildConfig.AZURACAST_PASSWORD,
+                am,
                 this
             ).also { it.start() }
+
+            requestAudioFocus(am)
+            registerNetworkCallback()
         }
         return START_NOT_STICKY
     }
@@ -94,6 +128,8 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         engine?.stop()
         engine = null
+        unregisterNetworkCallback()
+        abandonAudioFocus()
         releaseLocks()
         state = BroadcastEngine.State.STOPPED
         stopSelf()
@@ -103,6 +139,8 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         engine?.stop()
         engine = null
+        unregisterNetworkCallback()
+        abandonAudioFocus()
         releaseLocks()
         super.onDestroy()
     }
@@ -117,9 +155,70 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
         updateNotification(newState)
     }
 
-    override fun onTelemetry(drops: Long, reconnects: Int) {
+    override fun onTelemetry(drops: Long, reconnects: Int, scoRefusals: Int, muted: Boolean) {
         dropCount = drops
         reconnectCount = reconnects
+        scoRefusalCount = scoRefusals
+        val focusChanged = focusLost != muted
+        focusLost = muted
+        if (focusChanged) updateNotification(state)
+    }
+
+    // ================= Network handover (section 7) =================
+
+    private fun registerNetworkCallback() {
+        val cm = getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager
+        connectivityManager = cm
+
+        val request = NetworkRequest.Builder()
+            .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            .build()
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onLost(network: Network) {
+                engine?.notifyNetworkLost()
+            }
+            override fun onAvailable(network: Network) {
+                engine?.notifyNetworkAvailable()
+            }
+        }
+        networkCallback = callback
+        try {
+            cm.registerNetworkCallback(request, callback)
+        } catch (_: Throwable) {
+            // Best-effort -- the writer thread's own write-timeout still
+            // catches a dead connection even if this registration fails.
+        }
+    }
+
+    private fun unregisterNetworkCallback() {
+        val cm = connectivityManager ?: return
+        val callback = networkCallback ?: return
+        try { cm.unregisterNetworkCallback(callback) } catch (_: Throwable) {}
+        connectivityManager = null
+        networkCallback = null
+    }
+
+    // ================= Audio focus / silence generator (section 6) =================
+
+    private fun requestAudioFocus(am: AudioManager) {
+        val attrs = AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+            .build()
+        val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+            .setAudioAttributes(attrs)
+            .setOnAudioFocusChangeListener(focusChangeListener)
+            .build()
+        focusRequest = request
+        try { am.requestAudioFocus(request) } catch (_: Throwable) {}
+    }
+
+    private fun abandonAudioFocus() {
+        val am = audioManager ?: return
+        val request = focusRequest ?: return
+        try { am.abandonAudioFocusRequest(request) } catch (_: Throwable) {}
+        focusRequest = null
+        audioManager = null
     }
 
     // ================= Notification =================
@@ -152,14 +251,21 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
         manager.notify(NOTIFICATION_ID, buildNotification(state))
     }
 
-    private fun statusTextFor(state: BroadcastEngine.State): String = when (state) {
-        BroadcastEngine.State.CONNECTING -> getString(
-            R.string.status_live_connecting, BuildConfig.AZURACAST_HOST, BuildConfig.AZURACAST_PORT
-        )
-        BroadcastEngine.State.LIVE -> getString(R.string.status_live_on_air)
-        BroadcastEngine.State.RECONNECTING -> getString(R.string.status_live_reconnecting)
-        BroadcastEngine.State.ERROR -> getString(R.string.status_live_error, lastError ?: "unknown")
-        BroadcastEngine.State.STOPPED, BroadcastEngine.State.IDLE -> getString(R.string.status_live_stopped)
+    private fun statusTextFor(state: BroadcastEngine.State): String {
+        val base = when (state) {
+            BroadcastEngine.State.CONNECTING -> getString(
+                R.string.status_live_connecting, BuildConfig.AZURACAST_HOST, BuildConfig.AZURACAST_PORT
+            )
+            BroadcastEngine.State.LIVE -> getString(R.string.status_live_on_air)
+            BroadcastEngine.State.RECONNECTING -> getString(R.string.status_live_reconnecting)
+            BroadcastEngine.State.ERROR -> getString(R.string.status_live_error, lastError ?: "unknown")
+            BroadcastEngine.State.STOPPED, BroadcastEngine.State.IDLE -> getString(R.string.status_live_stopped)
+        }
+        return if (focusLost && state == BroadcastEngine.State.LIVE) {
+            base + getString(R.string.status_muted_suffix)
+        } else {
+            base
+        }
     }
 
     // ================= Wake / WiFi locks =================

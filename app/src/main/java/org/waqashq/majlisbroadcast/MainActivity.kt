@@ -4,10 +4,13 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.MediaPlayer
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
+import android.provider.Settings
 import android.view.Gravity
 import android.widget.Button
 import android.widget.LinearLayout
@@ -23,10 +26,13 @@ import java.util.Locale
 /**
  * Test harness ONLY -- not the real app UI (see majlisbroadcast.md section 8
  * / Phase 5). Two independent sections: the Phase 1 local-file test, and the
- * Phase 3 live broadcast (via BroadcastService), which superseded the
- * Phase 2 direct-in-Activity streaming test.
+ * live broadcast (via BroadcastService), which now also drives the Phase 4
+ * first-run battery-optimization exemption prompt and shows Phase 4
+ * telemetry (SCO refusals, muted/call state).
  */
 class MainActivity : AppCompatActivity() {
+
+    private val prefBatteryExemptionAsked = "battery_exemption_asked"
 
     // --- Phase 1: local file test ---
     private lateinit var statusText: TextView
@@ -66,6 +72,10 @@ class MainActivity : AppCompatActivity() {
     private val requestNotificationPermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { /* proceed regardless -- the FGS still runs, the notification just won't show without it */ }
+
+    private val requestBatteryExemption = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { /* proceed regardless of the user's choice -- just re-check next time Go Live is tapped */ }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -209,6 +219,24 @@ class MainActivity : AppCompatActivity() {
             requestNotificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
             return
         }
+        // Section 7: without this exemption, the CPU can park mid-broadcast
+        // on aggressive OEMs regardless of the foreground service. This is a
+        // FIRST-RUN prompt only (per section 7's wording) -- if the user
+        // dismisses or declines it, we don't nag on every Go Live tap; they
+        // can still grant it later from system Settings if they hit
+        // reliability problems.
+        val prefs = getSharedPreferences("majlis_prefs", MODE_PRIVATE)
+        val powerManager = getSystemService(POWER_SERVICE) as PowerManager
+        if (!prefs.getBoolean(prefBatteryExemptionAsked, false) &&
+            !powerManager.isIgnoringBatteryOptimizations(packageName)
+        ) {
+            prefs.edit().putBoolean(prefBatteryExemptionAsked, true).apply()
+            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                data = Uri.parse("package:$packageName")
+            }
+            requestBatteryExemption.launch(intent)
+            return
+        }
 
         if (!isLive) {
             if (BuildConfig.AZURACAST_HOST.isBlank() || BuildConfig.AZURACAST_PORT == 0) {
@@ -232,12 +260,16 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun pollLiveState() {
-        val telemetry = getString(R.string.status_telemetry, BroadcastService.reconnectCount, BroadcastService.dropCount)
+        val telemetry = getString(
+            R.string.status_telemetry,
+            BroadcastService.reconnectCount, BroadcastService.dropCount, BroadcastService.scoRefusalCount
+        )
+        val muted = if (BroadcastService.focusLost) getString(R.string.status_muted_suffix) else ""
         when (BroadcastService.state) {
             BroadcastEngine.State.CONNECTING -> liveStatusText.text = getString(
                 R.string.status_live_connecting, BuildConfig.AZURACAST_HOST, BuildConfig.AZURACAST_PORT
             )
-            BroadcastEngine.State.LIVE -> liveStatusText.text = getString(R.string.status_live_on_air) + telemetry
+            BroadcastEngine.State.LIVE -> liveStatusText.text = getString(R.string.status_live_on_air) + muted + telemetry
             BroadcastEngine.State.RECONNECTING -> liveStatusText.text = getString(R.string.status_live_reconnecting) + telemetry
             BroadcastEngine.State.ERROR -> {
                 liveStatusText.text = getString(R.string.status_live_error, BroadcastService.lastError ?: "unknown")
