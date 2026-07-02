@@ -92,7 +92,12 @@ than real-time -- plausible trigger for a decoder-side clock-recovery
 assumption getting stuck. Fix: `BroadcastEngine.kt` now clears the queue
 on every successful (re)connect instead of draining the backlog, so the
 writer only ever sends audio at the pace it's actually being captured.
-Not yet confirmed on-device as of this note.
+Not yet confirmed on-device -- retested after this fix, whistle still
+present, so it isn't (solely) the burst-drain mechanism. Current
+hypothesis has shifted to the manual gain boost's hard clamp on loud
+peaks; `GAIN_FACTOR` dialed back from 4.0x to 3.0x as a first, modest
+experiment (see `BroadcastEngine.kt`). Not yet confirmed either -- next
+log will tell us whether this had any effect.
 
 App-side, `BroadcastEngine.kt` now special-cases a "Mountpoint already
 taken" rejection specifically: instead of doubling up through the backoff

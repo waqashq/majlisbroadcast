@@ -87,10 +87,13 @@ class BroadcastEngine(
         // UNPROCESSED deliberately has no AGC (that's what keeps voice full
         // instead of thin -- see section 3), but that also means no
         // automatic loudness boost the way MIC-source apps get. This
-        // manual gain compensates. ~4x (~12dB) is a starting point based on
-        // on-device comparison against AGC'd apps; adjust to taste. Clamped
-        // to avoid hard digital clipping on loud peaks.
-        private const val GAIN_FACTOR = 4.0f
+        // manual gain compensates. Started at 4x (~12dB) based on
+        // on-device comparison against AGC'd apps; dialed back to 3x
+        // (~9.5dB) after Phase 6 testing linked a persistent post-reconnect
+        // whistle to how hard/often loud peaks were hitting the hard clamp
+        // below -- less gain means fewer, smaller clamp events. Still
+        // clamped to avoid unbounded digital clipping on loud peaks.
+        private const val GAIN_FACTOR = 3.0f
     }
 
     @Volatile private var running = false
