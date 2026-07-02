@@ -93,9 +93,17 @@ class MainActivity : AppCompatActivity() {
         goLiveButton = Button(this).apply { text = getString(R.string.btn_go_live) }
         goLiveButton.setOnClickListener { onGoLiveClicked() }
 
+        // Shown so you can confirm which build is actually installed --
+        // bumped on every code push, see README.
+        val versionLabel = TextView(this).apply {
+            text = getString(R.string.build_version, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE)
+            textSize = 12f
+            alpha = 0.6f
+        }
+
         listOf(
             fileSectionLabel, statusText, recordButton, playButton, shareButton,
-            liveSectionLabel, liveStatusText, goLiveButton
+            liveSectionLabel, liveStatusText, goLiveButton, versionLabel
         ).forEach {
             root.addView(
                 it,
