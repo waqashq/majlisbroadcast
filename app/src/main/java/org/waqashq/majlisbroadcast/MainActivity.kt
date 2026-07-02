@@ -111,9 +111,19 @@ class MainActivity : AppCompatActivity() {
             alpha = 0.6f
         }
 
+        // Diagnostic only -- makes the actual OS-level state visible
+        // instead of having to dig through OEM battery-settings menus to
+        // confirm whether the exemption prompt actually needs to fire.
+        val batteryStateLabel = TextView(this).apply {
+            val ignoring = (getSystemService(POWER_SERVICE) as PowerManager).isIgnoringBatteryOptimizations(packageName)
+            text = getString(if (ignoring) R.string.battery_state_ignoring else R.string.battery_state_not_ignoring)
+            textSize = 12f
+            alpha = 0.6f
+        }
+
         listOf(
             fileSectionLabel, statusText, recordButton, playButton, shareButton,
-            liveSectionLabel, liveStatusText, goLiveButton, versionLabel
+            liveSectionLabel, liveStatusText, goLiveButton, versionLabel, batteryStateLabel
         ).forEach {
             root.addView(
                 it,
@@ -234,7 +244,19 @@ class MainActivity : AppCompatActivity() {
             val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
                 data = Uri.parse("package:$packageName")
             }
-            requestBatteryExemption.launch(intent)
+            try {
+                requestBatteryExemption.launch(intent)
+            } catch (_: Throwable) {
+                // Some OEM skins don't implement this standard intent --
+                // fall back to the app's own settings page so the user can
+                // still find battery options manually if needed.
+                try {
+                    startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                        data = Uri.parse("package:$packageName")
+                    })
+                } catch (_: Throwable) {
+                }
+            }
             return
         }
 
