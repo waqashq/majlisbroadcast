@@ -22,4 +22,4 @@ ever committed by accident, stop and rotate the AzuraCast source password.
 ## Status
 
 Building in strict phase order per `majlisbroadcast.md` section 12.
-Currently: Phase 6 (Gate 2: long-run validation), iterating on reconnect-timing and post-reconnect audio-artifact findings from long-run testing -- Phases 0, 0.5 Gate 1, 1, 2, 3, 4, and 5 complete.
+Currently: Phase 6 (Gate 2: long-run validation) complete -- all conditions (unplugged, screen off, network handover both directions, Bluetooth SCO refusal, real phone call, battery saver) verified against the live listener stream. Phases 0, 0.5 Gate 1, 1, 2, 3, 4, 5, and 6 complete. Next: Phase 7 (polish).
