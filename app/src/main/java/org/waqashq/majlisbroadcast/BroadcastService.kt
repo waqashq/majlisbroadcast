@@ -152,6 +152,16 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
     override fun onStateChanged(newState: BroadcastEngine.State, error: String?) {
         state = newState
         lastError = error
+        if (newState == BroadcastEngine.State.STOPPED || newState == BroadcastEngine.State.IDLE) {
+            // Don't resurrect the notification here. Teardown order (section
+            // 5) requires stopForeground() to run BEFORE engine.stop()
+            // releases the mic -- but engine.stop() itself sets the
+            // engine's state to STOPPED as its last step, which reaches
+            // this callback right after the notification was already
+            // removed. Without this guard, that re-posts it via notify()
+            // a moment after stopForeground() just took it away.
+            return
+        }
         updateNotification(newState)
     }
 

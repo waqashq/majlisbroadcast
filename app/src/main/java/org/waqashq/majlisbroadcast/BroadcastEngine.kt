@@ -412,10 +412,16 @@ class BroadcastEngine(
                     backoffMs = BACKOFF_MIN_MS
                 } catch (e: IOException) {
                     lastError = "${e.javaClass.simpleName}: ${e.message}"
-                    reconnectCount++
-                    reportTelemetry()
-                    state = State.RECONNECTING
-                    backoffMs = (backoffMs * 2).coerceAtMost(BACKOFF_MAX_MS)
+                    // Guard against a stop()-triggered close racing in here:
+                    // don't report a spurious RECONNECTING state (and the
+                    // notification update it triggers) once we're already
+                    // shutting down.
+                    if (running) {
+                        reconnectCount++
+                        reportTelemetry()
+                        state = State.RECONNECTING
+                        backoffMs = (backoffMs * 2).coerceAtMost(BACKOFF_MAX_MS)
+                    }
                     continue
                 }
             }
@@ -439,9 +445,13 @@ class BroadcastEngine(
                 lastError = "${e.javaClass.simpleName}: ${e.message}"
                 currentUploader?.close()
                 currentUploader = null
-                reconnectCount++
-                reportTelemetry()
-                state = State.RECONNECTING
+                // Same guard as above -- stop() force-closes the uploader,
+                // which lands here. Don't flip to RECONNECTING for that.
+                if (running) {
+                    reconnectCount++
+                    reportTelemetry()
+                    state = State.RECONNECTING
+                }
             }
         }
         currentUploader?.close()
