@@ -80,6 +80,20 @@ at the bottom of that page) but requires hand-written Liquidsoap and hasn't
 been attempted yet -- flagged as a possible future server-side change, not
 done as of this note.
 
+**2026-07-03, whistling investigation:** a persistent pitch-shifted
+"whistle" was reported starting right after a reconnect and continuing
+for the rest of that connection (not a momentary blip). Acoustic feedback
+was ruled out by testing at 1ft and 10m from any listening speaker with
+the same result either way. Working theory: on reconnect, the writer was
+draining whatever backlog had piled up in the `FrameQueue` during the
+outage in one rapid burst (a network write is far faster than the audio's
+real-time rate), handing the server several seconds of audio much faster
+than real-time -- plausible trigger for a decoder-side clock-recovery
+assumption getting stuck. Fix: `BroadcastEngine.kt` now clears the queue
+on every successful (re)connect instead of draining the backlog, so the
+writer only ever sends audio at the pace it's actually being captured.
+Not yet confirmed on-device as of this note.
+
 App-side, `BroadcastEngine.kt` now special-cases a "Mountpoint already
 taken" rejection specifically: instead of doubling up through the backoff
 ladder (which we now know just wastes 1-2 guaranteed-to-fail cycles once

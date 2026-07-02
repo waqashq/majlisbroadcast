@@ -465,8 +465,28 @@ class BroadcastEngine(
                     val u = IcecastUploader(host, port, username, password)
                     u.connectAndHandshake()
                     currentUploader = u
+                    // Don't try to "catch up" on whatever backlog piled up
+                    // in the queue during the outage. The coalescing loop
+                    // below only paces itself against real *incoming*
+                    // frames -- if there's already a backlog sitting in
+                    // the queue when we reconnect, it drains it in a rapid
+                    // burst (network write is far faster than the audio's
+                    // real-time rate), handing the server several seconds
+                    // of audio much faster than real-time. That appears to
+                    // be what was behind the persistent pitch-shifted
+                    // "whistle" reported after reconnects (a burst like
+                    // that is exactly the kind of thing that throws off a
+                    // decoder-side clock-recovery/resync assumption) --
+                    // acoustic feedback was ruled out (happened even 10m
+                    // away), so this is the next most likely cause given
+                    // it only ever showed up right after a reconnect and
+                    // the encoder itself is never restarted. Starting
+                    // clean costs a few seconds of stale audio that would
+                    // have sounded delayed and out of place next to live
+                    // content anyway.
+                    queue.clear()
                     state = State.LIVE
-                    DebugLog.log("Connected -- live")
+                    DebugLog.log("Connected -- live (queue cleared, resuming live)")
                     backoffMs = BACKOFF_MIN_MS
                 } catch (e: IOException) {
                     lastError = "${e.javaClass.simpleName}: ${e.message}"
