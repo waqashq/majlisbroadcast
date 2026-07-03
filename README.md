@@ -55,7 +55,8 @@ identity.
 ## Status
 
 Building in strict phase order per `majlisbroadcast.md` section 12.
-Currently: Phase 7 (polish) -- live listener count (AzuraCast now-playing
+Phase 7 (polish) complete: live listener count (AzuraCast now-playing
 API), a Settings screen with an in-app English/Urdu language toggle,
-cosmetic UI pass, and release-signing build infra. Custom app icon pending
-(user-provided). Phases 0, 0.5 Gate 1, 1, 2, 3, 4, 5, and 6 complete.
+cosmetic UI pass, a signed release APK (user-generated keystore, verified
+installed and working), and the custom launcher icon. All phases in
+section 12 (0 through 7) are now complete.
