@@ -52,8 +52,8 @@ android {
         applicationId = "org.waqashq.majlisbroadcast"
         minSdk = 26
         targetSdk = 34
-        versionCode = 11
-        versionName = "p7.1"
+        versionCode = 12
+        versionName = "p7.2"
 
         buildConfigField("String", "AZURACAST_HOST", "\"${secret("azuracast.host")}\"")
         buildConfigField("int", "AZURACAST_PORT", secret("azuracast.port", "0"))
