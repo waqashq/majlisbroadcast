@@ -54,9 +54,15 @@ identity.
 
 ## Status
 
-Building in strict phase order per `majlisbroadcast.md` section 12.
-Phase 7 (polish) complete: live listener count (AzuraCast now-playing
-API), a Settings screen with an in-app English/Urdu language toggle,
-cosmetic UI pass, a signed release APK (user-generated keystore, verified
-installed and working), and the custom launcher icon. All phases in
-section 12 (0 through 7) are now complete.
+Building in strict phase order per `majlisbroadcast.md` section 12. All
+phases in section 12 (0 through 7) are complete -- see git history for
+per-phase detail.
+
+Post-Phase-7, at the user's request: a redesigned dark "studio" Broadcast
+screen (status pill, latency, large elapsed time, live mic-level waveform,
+listener count, share-listen-link), local recording (forks the same
+already-encoded stream to a file on the phone, independent of and
+resilient to network state), and a bottom nav (Broadcast / Settings)
+replacing the old top-right Settings button. AzuraCast's own server-side
+live-broadcast recording is also available (station profile setting) and
+is the recommended primary copy; local recording is a phone-side backup.

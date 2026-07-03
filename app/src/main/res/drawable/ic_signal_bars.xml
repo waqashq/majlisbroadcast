@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Phase 7+: simple ascending signal/latency bars (used next to the
+     latency reading) - kept as plain rectangles rather than classic wifi
+     arcs to avoid hand-written elliptical-arc path math. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path android:fillColor="#FF000000" android:pathData="M4,14 h3 v6 h-3 z"/>
+    <path android:fillColor="#FF000000" android:pathData="M10,10 h3 v10 h-3 z"/>
+    <path android:fillColor="#FF000000" android:pathData="M16,5 h3 v15 h-3 z"/>
+</vector>

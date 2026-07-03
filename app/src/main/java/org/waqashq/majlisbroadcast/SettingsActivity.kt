@@ -3,6 +3,7 @@ package org.waqashq.majlisbroadcast
 import android.content.Intent
 import android.graphics.Typeface
 import android.os.Bundle
+import android.os.PowerManager
 import android.view.Gravity
 import android.widget.Button
 import android.widget.LinearLayout
@@ -28,11 +29,45 @@ class SettingsActivity : AppCompatActivity() {
     private val prefsName = "majlis_prefs"
     private val prefLanguageChoice = "language_choice"
 
+    // Mirrors BroadcastEngine's private constants -- purely for display.
+    private val queueCapacityDisplay = 150
+    private val configuredBitrateKbps = 64
+
+    private lateinit var diagnosticsText: TextView
+    private lateinit var batteryStateLabel: TextView
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         title = getString(R.string.settings_title)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         buildUi()
+        refreshDiagnostics()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Static snapshot on each visit rather than a continuous poller --
+        // this screen isn't meant to be watched live during a broadcast,
+        // just checked before/after one.
+        refreshDiagnostics()
+    }
+
+    private fun refreshDiagnostics() {
+        val latencyEstimateMs = (BroadcastService.queueDepth * 23) + 200
+        diagnosticsText.text = getString(
+            R.string.diagnostics_line,
+            BroadcastService.reconnectCount,
+            BroadcastService.dropCount,
+            BroadcastService.burstDropEvents,
+            BroadcastService.queueDepth, queueCapacityDisplay,
+            configuredBitrateKbps,
+            latencyEstimateMs,
+            BroadcastService.scoRefusalCount
+        )
+        val ignoring = (getSystemService(POWER_SERVICE) as PowerManager).isIgnoringBatteryOptimizations(packageName)
+        batteryStateLabel.text = getString(
+            if (ignoring) R.string.battery_state_ignoring else R.string.battery_state_not_ignoring
+        )
     }
 
     override fun onSupportNavigateUp(): Boolean {
@@ -81,6 +116,21 @@ class SettingsActivity : AppCompatActivity() {
             }
         }
 
+        // ---- Diagnostics (moved from the main screen in the Phase 7+ redesign) ----
+        val diagnosticsTitle = sectionTitle(getString(R.string.diagnostics_title))
+        diagnosticsText = TextView(this).apply {
+            textSize = 12f
+            alpha = 0.8f
+            gravity = Gravity.CENTER
+        }
+
+        // ---- Battery ----
+        batteryStateLabel = TextView(this).apply {
+            textSize = 12f
+            alpha = 0.8f
+            gravity = Gravity.CENTER
+        }
+
         // ---- Debug log (moved from the main screen) ----
         val debugTitle = sectionTitle(getString(R.string.log_title))
         val viewLogButton = Button(this).apply {
@@ -99,6 +149,7 @@ class SettingsActivity : AppCompatActivity() {
         listOf(
             languageTitle, languageRow,
             serverTitle, serverText,
+            diagnosticsTitle, diagnosticsText, batteryStateLabel,
             debugTitle, viewLogButton,
             versionLabel
         ).forEach {

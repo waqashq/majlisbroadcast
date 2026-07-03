@@ -49,5 +49,32 @@
     <string name="language_urdu">اردو</string>
 
     <string name="listener_count_label">سامعین: %1$d</string>
-    <string name="listener_count_unavailable">سامعین: —</string>
+    <string name="listener_count_unavailable">سامعین: — — —</string>
+
+    <string name="status_pill_offline">آف لائن</string>
+    <string name="status_pill_connecting">رابطہ ہو رہا ہے</string>
+    <string name="status_pill_on_air">براہ راست نشر</string>
+    <string name="status_pill_reconnecting">دوبارہ رابطہ</string>
+    <string name="status_pill_error">خرابی</string>
+
+    <string name="status_subtitle_offline">نشر کرنے کے لیے تیار</string>
+    <string name="status_subtitle_connecting">سرور سے رابطہ ہو رہا ہے…</string>
+    <string name="status_subtitle_on_air">براہ راست نشریات جاری ہیں</string>
+    <string name="status_subtitle_reconnecting">دوبارہ رابطہ ہو رہا ہے…</string>
+    <string name="status_subtitle_error">خرابی — ترتیبات ▸ ڈیبگ لاگ دیکھیں</string>
+    <string name="status_subtitle_muted">خاموش — کال جاری ہے</string>
+
+    <string name="latency_format">%1$d ms</string>
+    <string name="latency_unavailable">— ms</string>
+    <string name="bitrate_format">%1$d kbps</string>
+
+    <string name="btn_start_recording">ریکارڈنگ شروع کریں</string>
+    <string name="btn_stop_recording">ریکارڈنگ روکیں</string>
+    <string name="recording_saved_toast">ریکارڈنگ محفوظ ہوگئی: %1$s</string>
+
+    <string name="nav_broadcast">نشریات</string>
+
+    <string name="btn_share_event">ایونٹ شیئر کریں</string>
+    <string name="share_event_chooser_title">سننے کا لنک شیئر کریں</string>
+    <string name="share_event_unavailable">سننے کا لنک ابھی دستیاب نہیں — براہ راست نشر شروع کریں اور تھوڑا انتظار کریں</string>
 </resources>

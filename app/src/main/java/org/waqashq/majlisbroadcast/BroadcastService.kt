@@ -21,6 +21,10 @@ import android.os.PowerManager
 import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
  * Typed `microphone` foreground service: owns the BroadcastEngine, the
@@ -40,6 +44,8 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
         private const val CHANNEL_ID = "majlis_broadcast"
         private const val NOTIFICATION_ID = 1
         private const val ACTION_STOP = "org.waqashq.majlisbroadcast.action.STOP"
+        private const val ACTION_START_RECORDING = "org.waqashq.majlisbroadcast.action.START_RECORDING"
+        private const val ACTION_STOP_RECORDING = "org.waqashq.majlisbroadcast.action.STOP_RECORDING"
 
         // Phase 7: how often to poll AzuraCast's now-playing API while
         // live. This is a cosmetic nicety, not part of the streaming
@@ -73,6 +79,15 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
         /** Current listener count from AzuraCast's now-playing API, or null if unknown/unavailable (Phase 7). */
         @Volatile var listenerCount: Int? = null
             private set
+        /** Public listen-page URL from AzuraCast's now-playing API, or null if unknown/unavailable (Phase 7+). */
+        @Volatile var publicPlayerUrl: String? = null
+            private set
+        /** Whether a local recording is currently being written (Phase 7+). */
+        @Volatile var isRecording: Boolean = false
+            private set
+        /** File name of the most recent local recording (started or completed), or null if none this app run. */
+        @Volatile var lastRecordingFileName: String? = null
+            private set
 
         fun start(context: Context) {
             val intent = Intent(context, BroadcastService::class.java)
@@ -81,6 +96,17 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
 
         fun stop(context: Context) {
             val intent = Intent(context, BroadcastService::class.java).apply { action = ACTION_STOP }
+            context.startService(intent)
+        }
+
+        /** No-op if not currently live -- recording only makes sense while the engine is capturing audio. */
+        fun startRecording(context: Context) {
+            val intent = Intent(context, BroadcastService::class.java).apply { action = ACTION_START_RECORDING }
+            context.startService(intent)
+        }
+
+        fun stopRecording(context: Context) {
+            val intent = Intent(context, BroadcastService::class.java).apply { action = ACTION_STOP_RECORDING }
             context.startService(intent)
         }
     }
@@ -114,6 +140,14 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
             stopBroadcast()
+            return START_NOT_STICKY
+        }
+        if (intent?.action == ACTION_START_RECORDING) {
+            beginLocalRecording()
+            return START_NOT_STICKY
+        }
+        if (intent?.action == ACTION_STOP_RECORDING) {
+            endLocalRecording()
             return START_NOT_STICKY
         }
 
@@ -152,15 +186,35 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
         // still an active `microphone` FGS can trip the Android 14+
         // watchdog.
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
-        engine?.stop()
+        engine?.stop() // also flushes/closes any open local recording
         engine = null
         unregisterNetworkCallback()
         abandonAudioFocus()
         releaseLocks()
         stopListenerPolling()
+        isRecording = false
         state = BroadcastEngine.State.STOPPED
         sessionStartRealtime = 0
         stopSelf()
+    }
+
+    /** Starts a local recording of the current session. No-op if not live or already recording. */
+    private fun beginLocalRecording() {
+        val e = engine ?: return
+        if (isRecording) return
+        val dir = File(getExternalFilesDir(null), "recordings")
+        val name = "majlis_" + SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date()) + ".aac"
+        val file = File(dir, name)
+        if (e.startLocalRecording(file)) {
+            isRecording = true
+            lastRecordingFileName = name
+        }
+    }
+
+    private fun endLocalRecording() {
+        if (!isRecording) return
+        engine?.stopLocalRecording()
+        isRecording = false
     }
 
     override fun onDestroy() {
@@ -171,6 +225,7 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
         abandonAudioFocus()
         releaseLocks()
         stopListenerPolling()
+        isRecording = false
         sessionStartRealtime = 0
         super.onDestroy()
     }
@@ -334,7 +389,9 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
         listenerPollThread = Thread({
             while (listenerPolling) {
                 if (state == BroadcastEngine.State.LIVE) {
-                    listenerCount = ListenerCountFetcher.fetch(BuildConfig.AZURACAST_API_BASE_URL)
+                    val info = ListenerCountFetcher.fetch(BuildConfig.AZURACAST_API_BASE_URL)
+                    listenerCount = info?.listenerCount
+                    if (info?.publicPlayerUrl != null) publicPlayerUrl = info.publicPlayerUrl
                 }
                 try {
                     Thread.sleep(LISTENER_POLL_INTERVAL_MS)

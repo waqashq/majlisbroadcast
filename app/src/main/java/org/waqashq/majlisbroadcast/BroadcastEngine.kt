@@ -11,6 +11,8 @@ import android.media.MediaRecorder
 import android.os.Process
 import android.os.SystemClock
 import java.io.ByteArrayOutputStream
+import java.io.File
+import java.io.FileOutputStream
 import java.io.IOException
 
 /**
@@ -119,6 +121,15 @@ class BroadcastEngine(
         SAMPLE_RATE_TABLE.indexOf(SAMPLE_RATE).let { if (it < 0) 4 else it }
     @Volatile private var adtsChannelConfig = CHANNEL_COUNT
 
+    // Phase 7+: optional local recording, entirely independent of the
+    // network side. Forks the same already-encoded ADTS frames that go to
+    // the queue (see drainEncoder below) rather than running a second
+    // AudioRecord/MediaCodec session -- concurrent AudioRecord capture is
+    // unreliable across OEMs (this project already hit real device-specific
+    // socket/capture quirks on the Honor test device), so reusing the one
+    // proven capture pipeline is much safer than a second one.
+    @Volatile private var localRecordingOut: FileOutputStream? = null
+
     fun start() {
         if (running) return
         running = true
@@ -148,8 +159,46 @@ class BroadcastEngine(
         writerThread?.join(3000)
         captureThread = null
         writerThread = null
+        // Safety net: the capture thread's own finally-style teardown
+        // doesn't touch this (it's not the one that opened it in the
+        // spirit of ownership), so make sure a still-open recording file
+        // gets flushed and closed here rather than leaking a handle or
+        // losing buffered-but-unflushed tail audio.
+        closeLocalRecording()
         state = State.STOPPED
         DebugLog.log("Engine stopped")
+    }
+
+    /**
+     * Starts (or restarts) writing a local copy of the same encoded ADTS
+     * stream that's being broadcast, independent of network/LIVE state --
+     * recording keeps working through a reconnect gap. Returns false if the
+     * file couldn't be opened.
+     */
+    fun startLocalRecording(file: File): Boolean {
+        return try {
+            file.parentFile?.mkdirs()
+            localRecordingOut = FileOutputStream(file)
+            DebugLog.log("Local recording started: ${file.name}")
+            true
+        } catch (t: Throwable) {
+            DebugLog.log("Local recording failed to start: ${t.javaClass.simpleName}: ${t.message}")
+            false
+        }
+    }
+
+    fun stopLocalRecording() {
+        if (localRecordingOut != null) {
+            DebugLog.log("Local recording stopped")
+        }
+        closeLocalRecording()
+    }
+
+    private fun closeLocalRecording() {
+        val out = localRecordingOut ?: return
+        localRecordingOut = null
+        try { out.flush() } catch (_: Throwable) {}
+        try { out.close() } catch (_: Throwable) {}
     }
 
     /**
@@ -393,9 +442,23 @@ class BroadcastEngine(
                             encoded.limit(info.offset + info.size)
                             val raw = ByteArray(info.size)
                             encoded.get(raw)
-                            // Enqueue only -- never touches the network.
-                            // A stalled/reconnecting socket cannot block this.
-                            queue.offer(wrapAdts(raw))
+                            val frame = wrapAdts(raw)
+                            // Enqueue for the network side -- never touches
+                            // the network directly here. A stalled/
+                            // reconnecting socket cannot block this.
+                            queue.offer(frame)
+                            // Fork the same frame to a local recording file
+                            // if one is open (Phase 7+). Best-effort: a
+                            // write failure stops recording rather than
+                            // taking down capture/streaming.
+                            localRecordingOut?.let { out ->
+                                try {
+                                    out.write(frame)
+                                } catch (t: Throwable) {
+                                    DebugLog.log("Local recording write failed, stopping: ${t.javaClass.simpleName}: ${t.message}")
+                                    closeLocalRecording()
+                                }
+                            }
                         }
                     }
                     val isEos = info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0

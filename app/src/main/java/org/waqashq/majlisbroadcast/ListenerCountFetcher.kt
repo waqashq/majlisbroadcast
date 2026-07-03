@@ -5,11 +5,12 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 /**
- * Phase 7: reads the current listener count from AzuraCast's public
- * now-playing API. Purely a read-only, best-effort UI nicety -- entirely
- * separate from the streaming pipeline (per section 0's note that this was
- * deliberately deferred to the end because it "touches nothing in the
- * streaming pipeline"). Any failure here must never affect the broadcast.
+ * Phase 7: reads the current listener count and public listen-page URL
+ * from AzuraCast's public now-playing API. Purely a read-only, best-effort
+ * UI nicety -- entirely separate from the streaming pipeline (per section
+ * 0's note that this was deliberately deferred to the end because it
+ * "touches nothing in the streaming pipeline"). Any failure here must
+ * never affect the broadcast.
  *
  * Uses the all-stations endpoint (/api/nowplaying) rather than the
  * per-station shortcode endpoint (/api/nowplaying/{shortcode}) so no extra
@@ -20,8 +21,10 @@ import java.net.URL
 object ListenerCountFetcher {
     private const val TIMEOUT_MS = 6_000
 
-    /** Returns the current listener count, or null on any failure (network, parsing, etc). */
-    fun fetch(apiBaseUrl: String): Int? {
+    data class NowPlayingInfo(val listenerCount: Int, val publicPlayerUrl: String?)
+
+    /** Returns current now-playing info, or null on any failure (network, parsing, etc). */
+    fun fetch(apiBaseUrl: String): NowPlayingInfo? {
         if (apiBaseUrl.isBlank()) return null
         var conn: HttpURLConnection? = null
         return try {
@@ -36,7 +39,10 @@ object ListenerCountFetcher {
             if (stations.length() == 0) {
                 null
             } else {
-                stations.getJSONObject(0).getJSONObject("listeners").getInt("total")
+                val entry = stations.getJSONObject(0)
+                val listeners = entry.getJSONObject("listeners").getInt("total")
+                val playerUrl = entry.optJSONObject("station")?.optString("public_player_url")?.takeIf { it.isNotBlank() }
+                NowPlayingInfo(listeners, playerUrl)
             }
         } catch (_: Throwable) {
             null

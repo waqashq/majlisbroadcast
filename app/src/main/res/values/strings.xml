@@ -49,5 +49,32 @@
     <string name="language_urdu">اردو</string>
 
     <string name="listener_count_label">Listeners: %1$d</string>
-    <string name="listener_count_unavailable">Listeners: —</string>
+    <string name="listener_count_unavailable">Listeners: — — —</string>
+
+    <string name="status_pill_offline">OFFLINE</string>
+    <string name="status_pill_connecting">CONNECTING</string>
+    <string name="status_pill_on_air">ON AIR</string>
+    <string name="status_pill_reconnecting">RECONNECTING</string>
+    <string name="status_pill_error">ERROR</string>
+
+    <string name="status_subtitle_offline">Ready to broadcast</string>
+    <string name="status_subtitle_connecting">Connecting to server…</string>
+    <string name="status_subtitle_on_air">Broadcasting Live</string>
+    <string name="status_subtitle_reconnecting">Reconnecting…</string>
+    <string name="status_subtitle_error">Error — check Settings ▸ Debug Log</string>
+    <string name="status_subtitle_muted">Muted — call in progress</string>
+
+    <string name="latency_format">%1$d ms</string>
+    <string name="latency_unavailable">— ms</string>
+    <string name="bitrate_format">%1$d kbps</string>
+
+    <string name="btn_start_recording">Start Recording</string>
+    <string name="btn_stop_recording">Stop Recording</string>
+    <string name="recording_saved_toast">Recording saved: %1$s</string>
+
+    <string name="nav_broadcast">Broadcast</string>
+
+    <string name="btn_share_event">Share Event</string>
+    <string name="share_event_chooser_title">Share listen link</string>
+    <string name="share_event_unavailable">Listen link not available yet — go live and wait a moment</string>
 </resources>

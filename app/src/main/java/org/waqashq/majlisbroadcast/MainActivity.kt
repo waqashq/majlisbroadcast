@@ -16,49 +16,53 @@ import android.provider.Settings
 import android.view.Gravity
 import android.view.View
 import android.widget.Button
+import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
-import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import java.util.Locale
 
 /**
- * Phase 5/7: the real (minimal) app UI -- see majlisbroadcast.md section 8.
- * Go Live/Stop, status, mic level/clipping meter, elapsed time, live
- * listener count, and lightweight diagnostics. Bilingual via res/values
- * (English) and res/values-ur (Urdu); RTL is handled by the system since
- * supportsRtl is set and nothing here hardcodes left/right.
+ * Phase 5/7+: the main Broadcast screen -- see majlisbroadcast.md section 8
+ * (deliberately minimal in *feature* surface, though the Phase 7+ redesign
+ * gave it a dedicated dark "studio" look independent of system light/dark
+ * mode: status pill, latency, elapsed time, Go Live/Stop, local recording,
+ * a live mic-level waveform, listener count, and a share-listen-link
+ * action). Settings (view-only server panel, diagnostics, debug log,
+ * language) lives in SettingsActivity, reached via the bottom nav.
  *
- * Phase 7 moved the view-only server panel and the debug log viewer out to
- * SettingsActivity to keep this screen bare per section 8, and added the
- * Settings entry point (top-right) plus a small cosmetic pass (UiTheme).
+ * Bilingual via res/values (English) and res/values-ur (Urdu); RTL is
+ * handled by the system since supportsRtl is set and nothing here
+ * hardcodes left/right.
  *
- * The Phase 1 local-file test harness (AacFileRecorder) is no longer wired
- * into this screen -- it already served its purpose (validating capture/
- * encode/ADTS offline). The class itself is left in the repo in case it's
- * useful for future debugging.
+ * The Phase 1 local-file test harness (AacFileRecorder) is superseded by
+ * BroadcastEngine's own fork-to-file local recording (Phase 7+) and is no
+ * longer wired in; left in the repo for reference.
  */
 class MainActivity : AppCompatActivity() {
 
     private val prefBatteryExemptionAsked = "battery_exemption_asked"
     private val prefsName = "majlis_prefs"
 
-    // Mirrors BroadcastEngine's private constants -- purely for display,
-    // update here too if those ever change.
-    private val queueCapacityDisplay = 150
     private val configuredBitrateKbps = 64
 
-    private lateinit var statusText: TextView
-    private lateinit var goLiveButton: Button
+    private lateinit var statusPill: TextView
+    private lateinit var latencyIcon: ImageView
+    private lateinit var latencyText: TextView
     private lateinit var elapsedText: TextView
-    private lateinit var micLevelBar: ProgressBar
+    private lateinit var statusSubtitle: TextView
+    private lateinit var goLiveButton: Button
+    private lateinit var recordButton: Button
+    private lateinit var micCircle: View
+    private lateinit var waveform: WaveformView
+    private lateinit var bitrateText: TextView
     private lateinit var micClippingText: TextView
-    private lateinit var diagnosticsText: TextView
     private lateinit var listenerCountText: TextView
-    private lateinit var batteryStateLabel: TextView
-    private lateinit var versionLabel: TextView
+    private lateinit var shareButton: TextView
 
     private var isLive = false
     private val uiHandler = Handler(Looper.getMainLooper())
@@ -72,7 +76,7 @@ class MainActivity : AppCompatActivity() {
     private val requestMicPermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
-        if (granted) proceedWithFirstRunChecks() else statusText.text = getString(R.string.status_mic_denied)
+        if (granted) proceedWithFirstRunChecks() else statusSubtitle.text = getString(R.string.status_mic_denied)
     }
 
     private val requestNotificationPermission = registerForActivityResult(
@@ -109,134 +113,261 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun buildUi() {
-        val topBar = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.END
-            setPadding(24, 24, 24, 0)
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(UiTheme.STUDIO_BG)
         }
-        val settingsButton = Button(this).apply {
-            text = getString(R.string.btn_settings)
-            textSize = 12f
-        }
-        settingsButton.setOnClickListener {
-            startActivity(Intent(this, SettingsActivity::class.java))
-        }
-        topBar.addView(settingsButton)
 
-        val content = LinearLayout(this).apply {
+        val scrollContent = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(40, 64, 40, 40)
+        }
+
+        // ---- Card ----
+        val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            setPadding(48, 32, 48, 48)
+            background = UiTheme.studioCard()
+            setPadding(48, 40, 48, 36)
         }
 
-        statusText = TextView(this).apply {
-            textSize = 20f
-            gravity = Gravity.CENTER
+        statusPill = TextView(this).apply {
+            textSize = 13f
             setTypeface(typeface, Typeface.BOLD)
+            setPadding(40, 14, 40, 14)
+            gravity = Gravity.CENTER
         }
+
+        val latencyRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+        }
+        latencyIcon = ImageView(this).apply {
+            setImageResource(R.drawable.ic_signal_bars)
+            layoutParams = LinearLayout.LayoutParams(32, 32)
+        }
+        latencyText = TextView(this).apply {
+            textSize = 13f
+            setTypeface(typeface, Typeface.BOLD)
+            setPadding(12, 0, 0, 0)
+        }
+        latencyRow.addView(latencyIcon)
+        latencyRow.addView(latencyText)
+
+        elapsedText = TextView(this).apply {
+            textSize = 46f
+            setTypeface(Typeface.MONOSPACE, Typeface.BOLD)
+            setTextColor(UiTheme.STUDIO_TEXT_PRIMARY)
+            gravity = Gravity.CENTER
+        }
+
+        statusSubtitle = TextView(this).apply {
+            textSize = 13f
+            setTextColor(UiTheme.STUDIO_TEXT_MUTED)
+            gravity = Gravity.CENTER
+        }
+
         goLiveButton = Button(this).apply {
-            text = getString(R.string.btn_go_live)
-            textSize = 18f
+            textSize = 16f
+            setTypeface(typeface, Typeface.BOLD)
             setTextColor(Color.WHITE)
-            setPadding(64, 32, 64, 32)
+            isAllCaps = false
+            setPadding(0, 34, 0, 34)
         }
         goLiveButton.setOnClickListener { onGoLiveClicked() }
 
-        elapsedText = TextView(this).apply { textSize = 14f }
+        recordButton = Button(this).apply {
+            textSize = 14f
+            setTypeface(typeface, Typeface.BOLD)
+            isAllCaps = false
+            setPadding(0, 22, 0, 22)
+        }
+        recordButton.setOnClickListener { onRecordClicked() }
 
-        // ---- Mic meter card ----
-        val micCard = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            background = UiTheme.cardBackground()
-            setPadding(32, 24, 32, 24)
+        // ---- mic + waveform + bitrate row ----
+        val meterRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
         }
-        val micLevelLabel = TextView(this).apply {
-            text = getString(R.string.mic_level_label)
+        val micStack = FrameLayout(this).apply {
+            layoutParams = LinearLayout.LayoutParams(88, 88)
+        }
+        micCircle = View(this).apply {
+            background = UiTheme.studioMicCircle(UiTheme.STUDIO_TEXT_MUTED)
+        }
+        val micIcon = ImageView(this).apply {
+            setImageResource(R.drawable.ic_mic)
+            setColorFilter(Color.WHITE)
+        }
+        micStack.addView(micCircle, FrameLayout.LayoutParams(88, 88))
+        micStack.addView(
+            micIcon,
+            FrameLayout.LayoutParams(44, 44).apply { gravity = Gravity.CENTER }
+        )
+
+        waveform = WaveformView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(0, 80, 1f).apply {
+                marginStart = 20
+                marginEnd = 20
+            }
+        }
+
+        bitrateText = TextView(this).apply {
             textSize = 12f
+            setTextColor(UiTheme.STUDIO_TEXT_MUTED)
+            text = getString(R.string.bitrate_format, configuredBitrateKbps)
         }
-        micLevelBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
-            max = 100
-            progress = 0
-        }
+
+        meterRow.addView(micStack)
+        meterRow.addView(waveform)
+        meterRow.addView(bitrateText)
+
         micClippingText = TextView(this).apply {
             text = getString(R.string.mic_clipping_warning)
-            textSize = 12f
-            setTextColor(UiTheme.STOP_RED)
-            visibility = View.GONE
-        }
-        micLevelBar.layoutParams = LinearLayout.LayoutParams(600, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-            topMargin = 8
-        }
-        listOf(micLevelLabel, micLevelBar, micClippingText).forEach {
-            micCard.addView(it, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 4 })
-        }
-
-        // ---- Diagnostics card ----
-        val diagCard = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            background = UiTheme.cardBackground()
-            setPadding(32, 24, 32, 24)
-        }
-        diagnosticsText = TextView(this).apply {
             textSize = 11f
-            alpha = 0.7f
+            setTextColor(UiTheme.STUDIO_STOP_RED)
             gravity = Gravity.CENTER
-        }
-        listenerCountText = TextView(this).apply {
-            textSize = 13f
-            gravity = Gravity.CENTER
-            setTypeface(typeface, Typeface.BOLD)
-            setTextColor(UiTheme.ACCENT_GOLD)
             visibility = View.GONE
         }
-        listOf(diagnosticsText, listenerCountText).forEach {
-            diagCard.addView(it, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 6 })
-        }
-
-        batteryStateLabel = TextView(this).apply { textSize = 11f; alpha = 0.6f }
-        versionLabel = TextView(this).apply { textSize = 11f; alpha = 0.6f }
 
         listOf(
-            statusText, goLiveButton, elapsedText,
-            micCard, diagCard,
-            batteryStateLabel, versionLabel
+            statusPill, latencyRow, elapsedText, statusSubtitle,
+            goLiveButton, recordButton, meterRow, micClippingText
         ).forEach {
-            content.addView(
+            card.addView(
                 it,
-                LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.WRAP_CONTENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
-                ).apply { topMargin = 24 }
+                LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                    topMargin = 20
+                }
+            )
+        }
+        // goLiveButton/recordButton/meterRow should stretch to the card's width.
+        goLiveButton.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 24 }
+        recordButton.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 16 }
+        meterRow.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 24 }
+
+        scrollContent.addView(card, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+
+        // ---- Listeners + Share (below the card) ----
+        listenerCountText = TextView(this).apply {
+            textSize = 14f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(UiTheme.STUDIO_ON_AIR_GREEN)
+            gravity = Gravity.CENTER
+        }
+        shareButton = TextView(this).apply {
+            text = getString(R.string.btn_share_event)
+            textSize = 14f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(UiTheme.STUDIO_ON_AIR_GREEN)
+            gravity = Gravity.CENTER
+            setPadding(0, 12, 0, 12)
+        }
+        shareButton.setOnClickListener { onShareClicked() }
+
+        listOf(listenerCountText, shareButton).forEach {
+            scrollContent.addView(
+                it,
+                LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                    topMargin = 28
+                }
             )
         }
 
-        val outer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        outer.addView(topBar, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-        outer.addView(content, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        val scrollView = ScrollView(this).apply { addView(scrollContent) }
 
-        setContentView(ScrollView(this).apply { addView(outer) })
+        // ---- Bottom nav ----
+        val nav = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setBackgroundColor(UiTheme.STUDIO_CARD_BG)
+        }
+        val navBroadcast = buildNavTab(R.drawable.ic_radio, getString(R.string.nav_broadcast), active = true)
+        val navSettings = buildNavTab(R.drawable.ic_settings_sliders, getString(R.string.btn_settings), active = false)
+        navSettings.setOnClickListener { startActivity(Intent(this, SettingsActivity::class.java)) }
+        nav.addView(navBroadcast, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        nav.addView(navSettings, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+
+        root.addView(scrollView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+        root.addView(nav, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+
+        setContentView(root)
 
         updateGoLiveButtonStyle()
+        updateRecordButtonStyle()
         refreshStaticInfo()
     }
 
-    private fun refreshStaticInfo() {
-        if (!isLive) statusText.text = getString(R.string.status_live_stopped)
-
-        versionLabel.text = getString(R.string.build_version, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE)
-
-        val ignoring = (getSystemService(POWER_SERVICE) as PowerManager).isIgnoringBatteryOptimizations(packageName)
-        batteryStateLabel.text = getString(
-            if (ignoring) R.string.battery_state_ignoring else R.string.battery_state_not_ignoring
-        )
+    private fun buildNavTab(iconRes: Int, label: String, active: Boolean): LinearLayout {
+        val tab = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(0, 22, 0, 22)
+        }
+        val icon = ImageView(this).apply {
+            setImageResource(iconRes)
+            setColorFilter(if (active) UiTheme.STUDIO_BORDER_TEAL else UiTheme.STUDIO_TEXT_MUTED)
+            layoutParams = LinearLayout.LayoutParams(44, 44)
+        }
+        val text = TextView(this).apply {
+            text = label
+            textSize = 11f
+            setTypeface(typeface, if (active) Typeface.BOLD else Typeface.NORMAL)
+            setTextColor(if (active) UiTheme.STUDIO_BORDER_TEAL else UiTheme.STUDIO_TEXT_MUTED)
+            gravity = Gravity.CENTER
+        }
+        tab.addView(icon, LinearLayout.LayoutParams(44, 44).apply { topMargin = 0 })
+        tab.addView(text, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 6 })
+        return tab
     }
 
-    /** Recolors/relabels the Go Live button for its current idle/live state (Phase 7 cosmetic pass). */
+    private fun refreshStaticInfo() {
+        if (!isLive) applyStatusStyle(BroadcastEngine.State.IDLE, muted = false)
+    }
+
+    /** Recolors/relabels the Go Live button for its current idle/live state. */
     private fun updateGoLiveButtonStyle() {
         goLiveButton.text = getString(if (isLive) R.string.btn_stop_live else R.string.btn_go_live)
-        goLiveButton.background = UiTheme.pillButtonBackground(if (isLive) UiTheme.STOP_RED else UiTheme.PRIMARY_GREEN)
+        goLiveButton.background = UiTheme.pillButtonBackground(if (isLive) UiTheme.STUDIO_STOP_RED else UiTheme.PRIMARY_GREEN)
+    }
+
+    private fun updateRecordButtonStyle() {
+        val recording = BroadcastService.isRecording
+        recordButton.text = getString(if (recording) R.string.btn_stop_recording else R.string.btn_start_recording)
+        recordButton.background = UiTheme.outlinePillBackground(if (recording) UiTheme.STUDIO_STOP_RED else UiTheme.STUDIO_TEXT_MUTED)
+        recordButton.setTextColor(if (recording) UiTheme.STUDIO_STOP_RED else UiTheme.STUDIO_TEXT_PRIMARY)
+        recordButton.isEnabled = isLive
+        recordButton.alpha = if (isLive) 1f else 0.5f
+    }
+
+    /** Central place mapping engine state (+ mute) to the pill badge, subtitle, and latency row. */
+    private fun applyStatusStyle(state: BroadcastEngine.State, muted: Boolean) {
+        val (pillText, pillBg, pillFg) = when (state) {
+            BroadcastEngine.State.CONNECTING -> Triple(getString(R.string.status_pill_connecting), UiTheme.STUDIO_CARD_BG, UiTheme.STUDIO_AMBER)
+            BroadcastEngine.State.LIVE -> Triple(getString(R.string.status_pill_on_air), UiTheme.STUDIO_ON_AIR_BG, UiTheme.STUDIO_ON_AIR_GREEN)
+            BroadcastEngine.State.RECONNECTING -> Triple(getString(R.string.status_pill_reconnecting), UiTheme.STUDIO_CARD_BG, UiTheme.STUDIO_AMBER)
+            BroadcastEngine.State.ERROR -> Triple(getString(R.string.status_pill_error), UiTheme.STUDIO_CARD_BG, UiTheme.STUDIO_STOP_RED)
+            BroadcastEngine.State.STOPPED, BroadcastEngine.State.IDLE -> Triple(getString(R.string.status_pill_offline), UiTheme.STUDIO_CARD_BG, UiTheme.STUDIO_TEXT_MUTED)
+        }
+        statusPill.text = pillText
+        statusPill.background = UiTheme.studioPillBadge(pillBg)
+        statusPill.setTextColor(pillFg)
+
+        statusSubtitle.text = if (muted && state == BroadcastEngine.State.LIVE) {
+            getString(R.string.status_subtitle_muted)
+        } else {
+            when (state) {
+                BroadcastEngine.State.CONNECTING -> getString(R.string.status_subtitle_connecting)
+                BroadcastEngine.State.LIVE -> getString(R.string.status_subtitle_on_air)
+                BroadcastEngine.State.RECONNECTING -> getString(R.string.status_subtitle_reconnecting)
+                BroadcastEngine.State.ERROR -> getString(R.string.status_subtitle_error)
+                BroadcastEngine.State.STOPPED, BroadcastEngine.State.IDLE -> getString(R.string.status_subtitle_offline)
+            }
+        }
+
+        val micColor = if (state == BroadcastEngine.State.LIVE) UiTheme.STUDIO_ON_AIR_GREEN else UiTheme.STUDIO_TEXT_MUTED
+        micCircle.background = UiTheme.studioMicCircle(micColor)
+        latencyIcon.setColorFilter(if (state == BroadcastEngine.State.LIVE) UiTheme.STUDIO_ON_AIR_GREEN else UiTheme.STUDIO_TEXT_MUTED)
+        latencyText.setTextColor(if (state == BroadcastEngine.State.LIVE) UiTheme.STUDIO_ON_AIR_GREEN else UiTheme.STUDIO_TEXT_MUTED)
     }
 
     // ================= First-run permission chain (section 7) =================
@@ -288,87 +419,102 @@ class MainActivity : AppCompatActivity() {
 
         if (!isLive) {
             if (BuildConfig.AZURACAST_HOST.isBlank() || BuildConfig.AZURACAST_PORT == 0) {
-                statusText.text = getString(R.string.status_live_missing_secrets)
+                statusSubtitle.text = getString(R.string.status_live_missing_secrets)
                 return
             }
             DebugLog.log("Go Live tapped")
             BroadcastService.start(this)
             isLive = true
             updateGoLiveButtonStyle()
-            statusText.text = getString(
-                R.string.status_live_connecting, BuildConfig.AZURACAST_HOST, BuildConfig.AZURACAST_PORT
-            )
+            updateRecordButtonStyle()
+            applyStatusStyle(BroadcastEngine.State.CONNECTING, muted = false)
             uiHandler.post(livePoller)
         } else {
             DebugLog.log("Stop tapped")
             BroadcastService.stop(this)
             isLive = false
             updateGoLiveButtonStyle()
-            statusText.text = getString(R.string.status_live_stopped)
+            updateRecordButtonStyle()
+            applyStatusStyle(BroadcastEngine.State.STOPPED, muted = false)
             elapsedText.text = ""
-            listenerCountText.visibility = View.GONE
+            latencyText.text = getString(R.string.latency_unavailable)
+            listenerCountText.text = getString(R.string.listener_count_unavailable)
+            waveform.reset()
             uiHandler.removeCallbacks(livePoller)
         }
     }
 
-    private fun pollLiveState() {
-        when (BroadcastService.state) {
-            BroadcastEngine.State.CONNECTING -> statusText.text = getString(
-                R.string.status_live_connecting, BuildConfig.AZURACAST_HOST, BuildConfig.AZURACAST_PORT
-            )
-            BroadcastEngine.State.LIVE -> {
-                val muted = if (BroadcastService.focusLost) getString(R.string.status_muted_suffix) else ""
-                statusText.text = getString(R.string.status_live_on_air) + muted
+    private fun onRecordClicked() {
+        if (!isLive) return
+        if (BroadcastService.isRecording) {
+            BroadcastService.stopRecording(this)
+            BroadcastService.lastRecordingFileName?.let {
+                Toast.makeText(this, getString(R.string.recording_saved_toast, it), Toast.LENGTH_SHORT).show()
             }
-            BroadcastEngine.State.RECONNECTING -> statusText.text = getString(R.string.status_live_reconnecting)
-            BroadcastEngine.State.ERROR -> statusText.text = getString(
-                R.string.status_live_error, BroadcastService.lastError ?: "unknown"
-            )
+        } else {
+            BroadcastService.startRecording(this)
+        }
+        // Reflects the *intent*; the next 300ms poll tick picks up the
+        // service's actual confirmed state (it's a fire-and-forget Intent).
+        updateRecordButtonStyle()
+    }
+
+    private fun onShareClicked() {
+        val url = BroadcastService.publicPlayerUrl
+        if (url.isNullOrBlank()) {
+            Toast.makeText(this, getString(R.string.share_event_unavailable), Toast.LENGTH_SHORT).show()
+            return
+        }
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, url)
+        }
+        startActivity(Intent.createChooser(intent, getString(R.string.share_event_chooser_title)))
+    }
+
+    private fun pollLiveState() {
+        val state = BroadcastService.state
+        applyStatusStyle(state, BroadcastService.focusLost)
+
+        when (state) {
             BroadcastEngine.State.STOPPED, BroadcastEngine.State.IDLE -> {
                 if (isLive) {
                     isLive = false
                     updateGoLiveButtonStyle()
-                    statusText.text = getString(R.string.status_live_stopped)
+                    updateRecordButtonStyle()
                     elapsedText.text = ""
-                    listenerCountText.visibility = View.GONE
+                    latencyText.text = getString(R.string.latency_unavailable)
+                    listenerCountText.text = getString(R.string.listener_count_unavailable)
+                    waveform.reset()
                     uiHandler.removeCallbacks(livePoller)
                 }
             }
+            else -> {}
         }
 
         if (BroadcastService.sessionStartRealtime > 0) {
             val elapsedSec = (SystemClock.elapsedRealtime() - BroadcastService.sessionStartRealtime) / 1000
-            elapsedText.text = getString(R.string.elapsed_time_format, formatElapsed(elapsedSec))
+            elapsedText.text = formatElapsed(elapsedSec)
         }
 
-        micLevelBar.progress = BroadcastService.micLevel
+        waveform.pushLevel(BroadcastService.micLevel)
         micClippingText.visibility = if (BroadcastService.micClipping) View.VISIBLE else View.GONE
 
-        val count = BroadcastService.listenerCount
-        if (isLive && count != null) {
-            listenerCountText.text = getString(R.string.listener_count_label, count)
-            listenerCountText.visibility = View.VISIBLE
-        } else if (isLive) {
-            listenerCountText.text = getString(R.string.listener_count_unavailable)
-            listenerCountText.visibility = View.VISIBLE
+        val latencyEstimateMs = (BroadcastService.queueDepth * 23) + 200
+        latencyText.text = if (state == BroadcastEngine.State.LIVE) {
+            getString(R.string.latency_format, latencyEstimateMs)
         } else {
-            listenerCountText.visibility = View.GONE
+            getString(R.string.latency_unavailable)
         }
 
-        // Buffering-latency estimate: how long audio currently sits in our
-        // own queue + the coalescing window -- NOT true end-to-end/network
-        // latency, which we have no way to measure without server support.
-        val latencyEstimateMs = (BroadcastService.queueDepth * 23) + 200
-        diagnosticsText.text = getString(R.string.diagnostics_title) + "\n" + getString(
-            R.string.diagnostics_line,
-            BroadcastService.reconnectCount,
-            BroadcastService.dropCount,
-            BroadcastService.burstDropEvents,
-            BroadcastService.queueDepth, queueCapacityDisplay,
-            configuredBitrateKbps,
-            latencyEstimateMs,
-            BroadcastService.scoRefusalCount
-        )
+        val count = BroadcastService.listenerCount
+        listenerCountText.text = if (isLive && count != null) {
+            getString(R.string.listener_count_label, count)
+        } else {
+            getString(R.string.listener_count_unavailable)
+        }
+
+        updateRecordButtonStyle()
     }
 
     private fun formatElapsed(totalSeconds: Long): String {
