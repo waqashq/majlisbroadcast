@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Phase 7: adaptive icon background layer, referenced by
+         mipmap-anydpi-v26/ic_launcher.xml. The foreground layer the user
+         generated via Image Asset Studio is fully opaque edge-to-edge (it's
+         the full circular badge artwork, not a transparent glyph), so this
+         color is fully covered and not actually visible; set close to the
+         badge's own dark green tone purely as a safe fallback for any
+         edge/anti-aliasing pixels. -->
+    <color name="ic_launcher_background">#04241A</color>
+</resources>
