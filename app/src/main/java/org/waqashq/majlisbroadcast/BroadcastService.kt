@@ -46,6 +46,8 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
         private const val ACTION_STOP = "org.waqashq.majlisbroadcast.action.STOP"
         private const val ACTION_START_RECORDING = "org.waqashq.majlisbroadcast.action.START_RECORDING"
         private const val ACTION_STOP_RECORDING = "org.waqashq.majlisbroadcast.action.STOP_RECORDING"
+        private const val ACTION_MUTE_MIC = "org.waqashq.majlisbroadcast.action.MUTE_MIC"
+        private const val ACTION_UNMUTE_MIC = "org.waqashq.majlisbroadcast.action.UNMUTE_MIC"
 
         // Phase 7: how often to poll AzuraCast's now-playing API while
         // live. This is a cosmetic nicety, not part of the streaming
@@ -64,6 +66,9 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
         @Volatile var scoRefusalCount: Int = 0
             private set
         @Volatile var focusLost: Boolean = false
+            private set
+        /** True while the user has manually muted the mic (Phase 7+, distinct from a call). */
+        @Volatile var manuallyMuted: Boolean = false
             private set
         @Volatile var queueDepth: Int = 0
             private set
@@ -109,6 +114,13 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
             val intent = Intent(context, BroadcastService::class.java).apply { action = ACTION_STOP_RECORDING }
             context.startService(intent)
         }
+
+        fun setMicMuted(context: Context, muted: Boolean) {
+            val intent = Intent(context, BroadcastService::class.java).apply {
+                action = if (muted) ACTION_MUTE_MIC else ACTION_UNMUTE_MIC
+            }
+            context.startService(intent)
+        }
     }
 
     private var engine: BroadcastEngine? = null
@@ -148,6 +160,14 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
         }
         if (intent?.action == ACTION_STOP_RECORDING) {
             endLocalRecording()
+            return START_NOT_STICKY
+        }
+        if (intent?.action == ACTION_MUTE_MIC) {
+            engine?.setManuallyMuted(true)
+            return START_NOT_STICKY
+        }
+        if (intent?.action == ACTION_UNMUTE_MIC) {
+            engine?.setManuallyMuted(false)
             return START_NOT_STICKY
         }
 
@@ -193,6 +213,7 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
         releaseLocks()
         stopListenerPolling()
         isRecording = false
+        manuallyMuted = false
         state = BroadcastEngine.State.STOPPED
         sessionStartRealtime = 0
         stopSelf()
@@ -226,6 +247,7 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
         releaseLocks()
         stopListenerPolling()
         isRecording = false
+        manuallyMuted = false
         sessionStartRealtime = 0
         super.onDestroy()
     }
@@ -252,16 +274,17 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
 
     override fun onTelemetry(
         drops: Long, reconnects: Int, scoRefusals: Int, muted: Boolean,
-        depth: Int, bursts: Int
+        depth: Int, bursts: Int, manualMute: Boolean
     ) {
         dropCount = drops
         reconnectCount = reconnects
         scoRefusalCount = scoRefusals
         queueDepth = depth
         burstDropEvents = bursts
-        val focusChanged = focusLost != muted
+        val changed = focusLost != muted || manuallyMuted != manualMute
         focusLost = muted
-        if (focusChanged) updateNotification(state)
+        manuallyMuted = manualMute
+        if (changed) updateNotification(state)
     }
 
     override fun onLevelUpdate(level: Int, clipping: Boolean) {
@@ -366,8 +389,12 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
             BroadcastEngine.State.ERROR -> getString(R.string.status_live_error, lastError ?: "unknown")
             BroadcastEngine.State.STOPPED, BroadcastEngine.State.IDLE -> getString(R.string.status_live_stopped)
         }
-        return if (focusLost && state == BroadcastEngine.State.LIVE) {
+        return if (state != BroadcastEngine.State.LIVE) {
+            base
+        } else if (focusLost) {
             base + getString(R.string.status_muted_suffix)
+        } else if (manuallyMuted) {
+            base + getString(R.string.status_muted_suffix_manual)
         } else {
             base
         }

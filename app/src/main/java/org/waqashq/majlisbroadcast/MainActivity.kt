@@ -204,6 +204,8 @@ class MainActivity : AppCompatActivity() {
             micIcon,
             FrameLayout.LayoutParams(44, 44).apply { gravity = Gravity.CENTER }
         )
+        micStack.isClickable = true
+        micStack.setOnClickListener { onMicToggleClicked() }
 
         waveform = WaveformView(this).apply {
             layoutParams = LinearLayout.LayoutParams(0, 80, 1f).apply {
@@ -227,7 +229,10 @@ class MainActivity : AppCompatActivity() {
             textSize = 11f
             setTextColor(UiTheme.STUDIO_STOP_RED)
             gravity = Gravity.CENTER
-            visibility = View.GONE
+            // INVISIBLE (not GONE): reserves its row's height at all times
+            // so it doesn't push the rest of the layout around when it
+            // appears/disappears.
+            visibility = View.INVISIBLE
         }
 
         listOf(
@@ -241,10 +246,14 @@ class MainActivity : AppCompatActivity() {
                 }
             )
         }
-        // goLiveButton/recordButton/meterRow should stretch to the card's width.
-        goLiveButton.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 24 }
-        recordButton.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 16 }
-        meterRow.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 24 }
+        // goLiveButton/recordButton/meterRow should stretch to the card's
+        // width. Generous top margins per user feedback: more breathing
+        // room between elapsed time -> Go Live, Stop -> Start Recording,
+        // and Start Recording -> the mic/waveform row.
+        goLiveButton.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 44 }
+        recordButton.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 28 }
+        meterRow.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 40 }
+        micClippingText.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 20 }
 
         scrollContent.addView(card, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
 
@@ -269,7 +278,7 @@ class MainActivity : AppCompatActivity() {
             scrollContent.addView(
                 it,
                 LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-                    topMargin = 28
+                    topMargin = 40
                 }
             )
         }
@@ -321,7 +330,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun refreshStaticInfo() {
-        if (!isLive) applyStatusStyle(BroadcastEngine.State.IDLE, muted = false)
+        if (!isLive) applyStatusStyle(BroadcastEngine.State.IDLE, callMuted = false, manualMuted = false)
     }
 
     /** Recolors/relabels the Go Live button for its current idle/live state. */
@@ -340,7 +349,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     /** Central place mapping engine state (+ mute) to the pill badge, subtitle, and latency row. */
-    private fun applyStatusStyle(state: BroadcastEngine.State, muted: Boolean) {
+    private fun applyStatusStyle(state: BroadcastEngine.State, callMuted: Boolean, manualMuted: Boolean) {
         val (pillText, pillBg, pillFg) = when (state) {
             BroadcastEngine.State.CONNECTING -> Triple(getString(R.string.status_pill_connecting), UiTheme.STUDIO_CARD_BG, UiTheme.STUDIO_AMBER)
             BroadcastEngine.State.LIVE -> Triple(getString(R.string.status_pill_on_air), UiTheme.STUDIO_ON_AIR_BG, UiTheme.STUDIO_ON_AIR_GREEN)
@@ -352,8 +361,11 @@ class MainActivity : AppCompatActivity() {
         statusPill.background = UiTheme.studioPillBadge(pillBg)
         statusPill.setTextColor(pillFg)
 
-        statusSubtitle.text = if (muted && state == BroadcastEngine.State.LIVE) {
+        val isLiveState = state == BroadcastEngine.State.LIVE
+        statusSubtitle.text = if (isLiveState && callMuted) {
             getString(R.string.status_subtitle_muted)
+        } else if (isLiveState && manualMuted) {
+            getString(R.string.status_subtitle_muted_manual)
         } else {
             when (state) {
                 BroadcastEngine.State.CONNECTING -> getString(R.string.status_subtitle_connecting)
@@ -364,10 +376,14 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        val micColor = if (state == BroadcastEngine.State.LIVE) UiTheme.STUDIO_ON_AIR_GREEN else UiTheme.STUDIO_TEXT_MUTED
+        val micColor = when {
+            isLiveState && (callMuted || manualMuted) -> UiTheme.STUDIO_STOP_RED
+            isLiveState -> UiTheme.STUDIO_ON_AIR_GREEN
+            else -> UiTheme.STUDIO_TEXT_MUTED
+        }
         micCircle.background = UiTheme.studioMicCircle(micColor)
-        latencyIcon.setColorFilter(if (state == BroadcastEngine.State.LIVE) UiTheme.STUDIO_ON_AIR_GREEN else UiTheme.STUDIO_TEXT_MUTED)
-        latencyText.setTextColor(if (state == BroadcastEngine.State.LIVE) UiTheme.STUDIO_ON_AIR_GREEN else UiTheme.STUDIO_TEXT_MUTED)
+        latencyIcon.setColorFilter(if (isLiveState) UiTheme.STUDIO_ON_AIR_GREEN else UiTheme.STUDIO_TEXT_MUTED)
+        latencyText.setTextColor(if (isLiveState) UiTheme.STUDIO_ON_AIR_GREEN else UiTheme.STUDIO_TEXT_MUTED)
     }
 
     // ================= First-run permission chain (section 7) =================
@@ -427,7 +443,7 @@ class MainActivity : AppCompatActivity() {
             isLive = true
             updateGoLiveButtonStyle()
             updateRecordButtonStyle()
-            applyStatusStyle(BroadcastEngine.State.CONNECTING, muted = false)
+            applyStatusStyle(BroadcastEngine.State.CONNECTING, callMuted = false, manualMuted = false)
             uiHandler.post(livePoller)
         } else {
             DebugLog.log("Stop tapped")
@@ -435,7 +451,7 @@ class MainActivity : AppCompatActivity() {
             isLive = false
             updateGoLiveButtonStyle()
             updateRecordButtonStyle()
-            applyStatusStyle(BroadcastEngine.State.STOPPED, muted = false)
+            applyStatusStyle(BroadcastEngine.State.STOPPED, callMuted = false, manualMuted = false)
             elapsedText.text = ""
             latencyText.text = getString(R.string.latency_unavailable)
             listenerCountText.text = getString(R.string.listener_count_unavailable)
@@ -459,8 +475,21 @@ class MainActivity : AppCompatActivity() {
         updateRecordButtonStyle()
     }
 
+    private fun onMicToggleClicked() {
+        if (!isLive) return
+        BroadcastService.setMicMuted(this, !BroadcastService.manuallyMuted)
+        // Next 300ms poll tick reflects the service's confirmed state
+        // (fire-and-forget Intent, same pattern as recording).
+    }
+
     private fun onShareClicked() {
+        // Prefer a precise public listen-page URL if the now-playing API
+        // ever supplies one; AzuraCast's current API doesn't expose one
+        // directly (verified against its own OpenAPI spec), so this falls
+        // back to the station's own web root, which for a single-station
+        // setup like this one is the station's public page.
         val url = BroadcastService.publicPlayerUrl
+            ?: BuildConfig.AZURACAST_API_BASE_URL.takeIf { it.isNotBlank() }
         if (url.isNullOrBlank()) {
             Toast.makeText(this, getString(R.string.share_event_unavailable), Toast.LENGTH_SHORT).show()
             return
@@ -474,7 +503,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun pollLiveState() {
         val state = BroadcastService.state
-        applyStatusStyle(state, BroadcastService.focusLost)
+        applyStatusStyle(state, BroadcastService.focusLost, BroadcastService.manuallyMuted)
 
         when (state) {
             BroadcastEngine.State.STOPPED, BroadcastEngine.State.IDLE -> {
@@ -498,7 +527,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         waveform.pushLevel(BroadcastService.micLevel)
-        micClippingText.visibility = if (BroadcastService.micClipping) View.VISIBLE else View.GONE
+        micClippingText.visibility = if (BroadcastService.micClipping) View.VISIBLE else View.INVISIBLE
 
         val latencyEstimateMs = (BroadcastService.queueDepth * 23) + 200
         latencyText.text = if (state == BroadcastEngine.State.LIVE) {

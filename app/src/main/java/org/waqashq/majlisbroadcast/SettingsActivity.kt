@@ -16,13 +16,18 @@ import androidx.core.content.FileProvider
 import androidx.core.os.LocaleListCompat
 
 /**
- * Phase 7: settings/configuration screen, split out from the main Go-Live
+ * Phase 7+: settings/configuration screen, split out from the main Go-Live
  * screen so that one stays bare per section 8. Houses the view-only server
- * panel, the debug log viewer (both moved here from MainActivity), and the
- * in-app language toggle (English / Urdu / system default) via AndroidX's
- * per-app language API -- works down to minSdk 26, and on API 33+ also
- * shows up in system Settings > App info > Language via the manifest's
- * localeConfig (res/xml/locales_config.xml).
+ * panel, diagnostics + battery state, the debug log viewer, and the in-app
+ * language toggle (English / Urdu / system default) via AndroidX's per-app
+ * language API -- works down to minSdk 26, and on API 33+ also shows up in
+ * system Settings > App info > Language via the manifest's localeConfig
+ * (res/xml/locales_config.xml).
+ *
+ * Restyled to match the Broadcast screen's dark "studio" look: card-grouped
+ * sections, a custom header instead of the system ActionBar (avoids the
+ * DayNight action bar's text color fighting a forced-dark background), and
+ * a dark AlertDialog for the debug log.
  */
 class SettingsActivity : AppCompatActivity() {
 
@@ -38,8 +43,7 @@ class SettingsActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        title = getString(R.string.settings_title)
-        supportActionBar?.setDisplayHomeAsUpEnabled(true)
+        supportActionBar?.hide()
         buildUi()
         refreshDiagnostics()
     }
@@ -70,26 +74,50 @@ class SettingsActivity : AppCompatActivity() {
         )
     }
 
-    override fun onSupportNavigateUp(): Boolean {
-        finish()
-        return true
-    }
-
     private fun buildUi() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(56, 56, 56, 56)
+            setBackgroundColor(UiTheme.STUDIO_BG)
         }
 
-        // ---- Language ----
-        val languageTitle = sectionTitle(getString(R.string.language_section_title))
+        // ---- Custom header (avoids theming the system ActionBar dark) ----
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(32, 56, 32, 24)
+        }
+        val backArrow = TextView(this).apply {
+            text = "‹" // ‹
+            textSize = 28f
+            setTextColor(UiTheme.STUDIO_TEXT_PRIMARY)
+            setPadding(16, 8, 32, 8)
+            isClickable = true
+            setOnClickListener { finish() }
+        }
+        val headerTitle = TextView(this).apply {
+            text = getString(R.string.settings_title)
+            textSize = 20f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(UiTheme.STUDIO_TEXT_PRIMARY)
+        }
+        header.addView(backArrow)
+        header.addView(headerTitle)
+
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(40, 8, 40, 48)
+        }
+
+        // ---- Language card ----
+        val languageCard = card()
+        languageCard.addView(cardTitle(getString(R.string.language_section_title)), topMarginParams(0))
         val languageRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
         }
-        val btnSystem = Button(this).apply { text = getString(R.string.language_system); textSize = 12f }
-        val btnEnglish = Button(this).apply { text = getString(R.string.language_english); textSize = 12f }
-        val btnUrdu = Button(this).apply { text = getString(R.string.language_urdu); textSize = 12f }
+        val btnSystem = pillToggle(getString(R.string.language_system))
+        val btnEnglish = pillToggle(getString(R.string.language_english))
+        val btnUrdu = pillToggle(getString(R.string.language_urdu))
         highlightActiveLanguage(btnSystem, btnEnglish, btnUrdu)
         btnSystem.setOnClickListener { setLanguage(null) }
         btnEnglish.setOnClickListener { setLanguage("en") }
@@ -103,82 +131,119 @@ class SettingsActivity : AppCompatActivity() {
                 }
             )
         }
+        languageCard.addView(languageRow, topMarginParams(20))
 
-        // ---- Server (view-only, moved from the main screen) ----
-        val serverTitle = sectionTitle(getString(R.string.server_panel_title))
-        val serverText = TextView(this).apply {
-            textSize = 13f
-            gravity = Gravity.CENTER
+        // ---- Server card (view-only) ----
+        val serverCard = card()
+        serverCard.addView(cardTitle(getString(R.string.server_panel_title)), topMarginParams(0))
+        val serverText = cardBody().apply {
             text = if (BuildConfig.AZURACAST_HOST.isNotBlank()) {
                 getString(R.string.server_panel_host_port, BuildConfig.AZURACAST_HOST, BuildConfig.AZURACAST_PORT)
             } else {
                 getString(R.string.server_panel_not_configured)
             }
         }
+        serverCard.addView(serverText, topMarginParams(12))
 
-        // ---- Diagnostics (moved from the main screen in the Phase 7+ redesign) ----
-        val diagnosticsTitle = sectionTitle(getString(R.string.diagnostics_title))
-        diagnosticsText = TextView(this).apply {
-            textSize = 12f
-            alpha = 0.8f
-            gravity = Gravity.CENTER
-        }
+        // ---- Diagnostics + battery card ----
+        val diagCard = card()
+        diagCard.addView(cardTitle(getString(R.string.diagnostics_title)), topMarginParams(0))
+        diagnosticsText = cardBody()
+        diagCard.addView(diagnosticsText, topMarginParams(12))
+        batteryStateLabel = cardBody()
+        diagCard.addView(batteryStateLabel, topMarginParams(16))
 
-        // ---- Battery ----
-        batteryStateLabel = TextView(this).apply {
-            textSize = 12f
-            alpha = 0.8f
-            gravity = Gravity.CENTER
-        }
-
-        // ---- Debug log (moved from the main screen) ----
-        val debugTitle = sectionTitle(getString(R.string.log_title))
-        val viewLogButton = Button(this).apply {
-            text = getString(R.string.btn_view_log)
-            textSize = 13f
-        }
+        // ---- Debug log card ----
+        val debugCard = card()
+        debugCard.addView(cardTitle(getString(R.string.log_title)), topMarginParams(0))
+        val viewLogButton = pillButton(getString(R.string.btn_view_log))
         viewLogButton.setOnClickListener { showDebugLogDialog() }
+        debugCard.addView(
+            viewLogButton,
+            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 20 }
+        )
 
         val versionLabel = TextView(this).apply {
             textSize = 11f
-            alpha = 0.6f
+            setTextColor(UiTheme.STUDIO_TEXT_MUTED)
             gravity = Gravity.CENTER
             text = getString(R.string.build_version, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE)
         }
 
-        listOf(
-            languageTitle, languageRow,
-            serverTitle, serverText,
-            diagnosticsTitle, diagnosticsText, batteryStateLabel,
-            debugTitle, viewLogButton,
-            versionLabel
-        ).forEach {
-            root.addView(
+        listOf(languageCard, serverCard, diagCard, debugCard).forEach {
+            content.addView(
                 it,
                 LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
                     topMargin = 28
                 }
             )
         }
+        content.addView(
+            versionLabel,
+            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 28 }
+        )
 
-        setContentView(ScrollView(this).apply { addView(root) })
+        val scrollView = ScrollView(this).apply { addView(content) }
+
+        root.addView(header, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        root.addView(scrollView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+
+        setContentView(root)
     }
 
-    private fun sectionTitle(text: String): TextView = TextView(this).apply {
+    // ================= Small studio-styled building blocks =================
+
+    private fun card(): LinearLayout = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        background = UiTheme.studioCard()
+        setPadding(36, 32, 36, 32)
+    }
+
+    private fun cardTitle(text: String): TextView = TextView(this).apply {
         this.text = text
-        textSize = 15f
+        textSize = 14f
         setTypeface(typeface, Typeface.BOLD)
-        setTextColor(UiTheme.PRIMARY_GREEN)
+        setTextColor(UiTheme.STUDIO_BORDER_TEAL)
         gravity = Gravity.CENTER
     }
+
+    private fun cardBody(): TextView = TextView(this).apply {
+        textSize = 13f
+        setTextColor(UiTheme.STUDIO_TEXT_MUTED)
+        gravity = Gravity.CENTER
+    }
+
+    private fun pillToggle(text: String): Button = Button(this).apply {
+        this.text = text
+        textSize = 12f
+        isAllCaps = false
+        setTextColor(UiTheme.STUDIO_TEXT_PRIMARY)
+        setPadding(0, 18, 0, 18)
+    }
+
+    private fun pillButton(text: String): Button = Button(this).apply {
+        this.text = text
+        textSize = 14f
+        isAllCaps = false
+        setTypeface(typeface, Typeface.BOLD)
+        setTextColor(UiTheme.STUDIO_TEXT_PRIMARY)
+        background = UiTheme.outlinePillBackground(UiTheme.STUDIO_BORDER_TEAL)
+        setPadding(0, 24, 0, 24)
+    }
+
+    private fun topMarginParams(margin: Int) =
+        LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = margin }
 
     private fun highlightActiveLanguage(system: Button, english: Button, urdu: Button) {
         val current = AppCompatDelegate.getApplicationLocales()
         val activeTag = if (current.isEmpty) null else current[0]?.language
         listOf(system to null, english to "en", urdu to "ur").forEach { (btn, tag) ->
             val active = activeTag == tag
-            btn.setTypeface(btn.typeface, if (active) Typeface.BOLD else Typeface.NORMAL)
-            btn.alpha = if (active) 1f else 0.6f
+            btn.background = if (active) {
+                UiTheme.pillButtonBackground(UiTheme.STUDIO_BORDER_TEAL)
+            } else {
+                UiTheme.outlinePillBackground(UiTheme.STUDIO_TEXT_MUTED)
+            }
         }
     }
 
@@ -192,7 +257,7 @@ class SettingsActivity : AppCompatActivity() {
         AppCompatDelegate.setApplicationLocales(locales)
     }
 
-    // ================= Debug log (moved from MainActivity, section 9) =================
+    // ================= Debug log (section 9) =================
 
     private fun showDebugLogDialog() {
         val lines = DebugLog.snapshot()
@@ -205,7 +270,10 @@ class SettingsActivity : AppCompatActivity() {
         }
         val scroll = ScrollView(this).apply { addView(logView) }
 
-        AlertDialog.Builder(this)
+        // A built-in AppCompat *always-dark* dialog style (not DayNight),
+        // to match the rest of the app rather than following the system
+        // theme.
+        AlertDialog.Builder(this, androidx.appcompat.R.style.Theme_AppCompat_Dialog)
             .setTitle(getString(R.string.log_title))
             .setView(scroll)
             .setPositiveButton(getString(R.string.btn_export_log)) { _, _ -> exportDebugLog() }

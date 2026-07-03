@@ -13,8 +13,13 @@ import android.view.View
  * frequency-spectrum analyzer -- the app only has an overall peak level per
  * frame (see BroadcastEngine.applyGainAndMeasure), not per-band data, so
  * this is a level-history strip with a fixed color-per-position palette
- * rather than real spectral colors. Cheap to draw, no allocations per
- * frame.
+ * rather than real spectral colors.
+ *
+ * Runs its own per-frame smoothing loop (postOnAnimation) that eases the
+ * displayed bar heights toward the latest pushed levels, decoupled from
+ * how often pushLevel() is actually called (~300ms from MainActivity's
+ * poll). Without this, bars visibly jump/snap on every update instead of
+ * flowing.
  */
 class WaveformView @JvmOverloads constructor(
     context: Context,
@@ -24,9 +29,13 @@ class WaveformView @JvmOverloads constructor(
     companion object {
         private const val BAR_COUNT = 32
         private const val MIN_BAR_HEIGHT_FRACTION = 0.08f
+        // Fraction of the remaining gap closed per animation frame --
+        // lower = smoother/slower, higher = snappier.
+        private const val SMOOTHING = 0.18f
     }
 
-    private val levels = IntArray(BAR_COUNT)
+    private val targetLevels = IntArray(BAR_COUNT)
+    private val displayLevels = FloatArray(BAR_COUNT)
     private var writeIndex = 0
 
     private val barPaint = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -37,16 +46,43 @@ class WaveformView @JvmOverloads constructor(
         Color.HSVToColor(floatArrayOf(((hue % 360f) + 360f) % 360f, 0.65f, 1f))
     }
 
-    /** Call with the latest 0-100 mic level; shifts the history strip left and redraws. */
+    private val animTick = object : Runnable {
+        override fun run() {
+            var stillMoving = false
+            for (i in 0 until BAR_COUNT) {
+                val diff = targetLevels[i] - displayLevels[i]
+                if (kotlin.math.abs(diff) > 0.4f) {
+                    displayLevels[i] += diff * SMOOTHING
+                    stillMoving = true
+                } else if (displayLevels[i] != targetLevels[i].toFloat()) {
+                    displayLevels[i] = targetLevels[i].toFloat()
+                }
+            }
+            invalidate()
+            postOnAnimation(this)
+        }
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        postOnAnimation(animTick)
+    }
+
+    override fun onDetachedFromWindow() {
+        removeCallbacks(animTick)
+        super.onDetachedFromWindow()
+    }
+
+    /** Call with the latest 0-100 mic level; the animation loop eases toward it and redraws. */
     fun pushLevel(level: Int) {
-        levels[writeIndex] = level.coerceIn(0, 100)
+        targetLevels[writeIndex] = level.coerceIn(0, 100)
         writeIndex = (writeIndex + 1) % BAR_COUNT
-        invalidate()
     }
 
     /** Resets to a flat idle strip (call when not live). */
     fun reset() {
-        levels.fill(0)
+        targetLevels.fill(0)
+        displayLevels.fill(0f)
         invalidate()
     }
 
@@ -64,7 +100,7 @@ class WaveformView @JvmOverloads constructor(
         for (i in 0 until BAR_COUNT) {
             // Oldest-to-newest left-to-right: read starting at writeIndex
             // (the next slot to be overwritten is the oldest sample).
-            val level = levels[(writeIndex + i) % BAR_COUNT]
+            val level = displayLevels[(writeIndex + i) % BAR_COUNT]
             val barHeight = minHeight + (h - minHeight) * (level / 100f)
             val left = i * (barWidth + gap)
             barPaint.color = barColors[i]

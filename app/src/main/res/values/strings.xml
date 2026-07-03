@@ -12,6 +12,7 @@
     <string name="status_live_stopped">Offline.</string>
     <string name="status_live_error">Error: %1$s</string>
     <string name="status_muted_suffix"> (muted — call in progress)</string>
+    <string name="status_muted_suffix_manual"> (muted)</string>
 
     <string name="mic_level_label">Mic level</string>
     <string name="mic_clipping_warning">Clipping — move back or speak softer</string>
@@ -63,6 +64,7 @@
     <string name="status_subtitle_reconnecting">Reconnecting…</string>
     <string name="status_subtitle_error">Error — check Settings ▸ Debug Log</string>
     <string name="status_subtitle_muted">Muted — call in progress</string>
+    <string name="status_subtitle_muted_manual">Muted</string>
 
     <string name="latency_format">%1$d ms</string>
     <string name="latency_unavailable">— ms</string>
@@ -76,5 +78,5 @@
 
     <string name="btn_share_event">Share Event</string>
     <string name="share_event_chooser_title">Share listen link</string>
-    <string name="share_event_unavailable">Listen link not available yet — go live and wait a moment</string>
+    <string name="share_event_unavailable">Listen link not configured — check Settings/secrets.properties</string>
 </resources>

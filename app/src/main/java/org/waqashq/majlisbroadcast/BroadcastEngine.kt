@@ -39,7 +39,7 @@ class BroadcastEngine(
         fun onStateChanged(state: State, error: String?)
         fun onTelemetry(
             dropCount: Long, reconnectCount: Int, scoRefusalCount: Int, focusLost: Boolean,
-            queueDepth: Int, burstDropEvents: Int
+            queueDepth: Int, burstDropEvents: Int, manuallyMuted: Boolean
         )
         /** level: 0-100 peak scale. Throttled to ~150ms; safe to call often. */
         fun onLevelUpdate(level: Int, clipping: Boolean)
@@ -106,6 +106,11 @@ class BroadcastEngine(
     @Volatile private var reconnectCount = 0
     @Volatile private var scoRefusalCount = 0
     @Volatile private var focusLost = false
+    // Phase 7+: user-initiated mute, distinct from focusLost (a phone call).
+    // Both use the exact same silence-substitution mechanism below --
+    // this is deliberately a separate flag so the UI/notification can tell
+    // "you muted yourself" apart from "a call is in progress".
+    @Volatile private var manuallyMuted = false
     @Volatile private var networkAvailableSignal = false
     @Volatile private var lastError: String? = null
     @Volatile private var currentUploader: IcecastUploader? = null
@@ -214,6 +219,15 @@ class BroadcastEngine(
         reportTelemetry()
     }
 
+    /** Called by the mic-mute toggle on the Broadcast screen (Phase 7+). */
+    fun setManuallyMuted(muted: Boolean) {
+        if (manuallyMuted != muted) {
+            DebugLog.log(if (muted) "Mic manually muted" else "Mic manually unmuted")
+        }
+        manuallyMuted = muted
+        reportTelemetry()
+    }
+
     /**
      * Called by the Service's ConnectivityManager callback when the active
      * network is lost. Force-closes the socket immediately so the writer
@@ -237,7 +251,7 @@ class BroadcastEngine(
     private fun reportTelemetry() {
         listener.onTelemetry(
             queue.totalDropped, reconnectCount, scoRefusalCount, focusLost,
-            queue.size(), queue.burstDropEvents
+            queue.size(), queue.burstDropEvents, manuallyMuted
         )
     }
 
@@ -288,13 +302,14 @@ class BroadcastEngine(
                 val inIndex = codec.dequeueInputBuffer(10_000)
                 if (inIndex >= 0) {
                     val read: Int
-                    if (focusLost) {
-                        // Phone call / focus loss (section 6): don't touch a
-                        // mic telephony may have claimed exclusively.
-                        // Synthesize perfectly-timed silence instead, paced
-                        // to real time so the sample clock stays continuous
-                        // and the harbor slot stays alive without a
-                        // reconnect.
+                    if (focusLost || manuallyMuted) {
+                        // Phone call / focus loss (section 6) or a manual
+                        // mute (Phase 7+): don't touch a mic telephony may
+                        // have claimed exclusively, or that the user has
+                        // deliberately silenced. Synthesize perfectly-timed
+                        // silence instead, paced to real time so the sample
+                        // clock stays continuous and the harbor slot stays
+                        // alive without a reconnect.
                         java.util.Arrays.fill(pcmBuf, 0.toByte())
                         read = pcmBuf.size
                         val pacingMs = (read / 2).toLong() * 1000L / SAMPLE_RATE

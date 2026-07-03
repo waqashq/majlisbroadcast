@@ -12,6 +12,7 @@
     <string name="status_live_stopped">آف لائن۔</string>
     <string name="status_live_error">خرابی: %1$s</string>
     <string name="status_muted_suffix"> (خاموش — کال جاری ہے)</string>
+    <string name="status_muted_suffix_manual"> (خاموش)</string>
 
     <string name="mic_level_label">مائیک کی سطح</string>
     <string name="mic_clipping_warning">آواز کٹ رہی ہے — پیچھے ہوں یا آہستہ بولیں</string>
@@ -63,6 +64,7 @@
     <string name="status_subtitle_reconnecting">دوبارہ رابطہ ہو رہا ہے…</string>
     <string name="status_subtitle_error">خرابی — ترتیبات ▸ ڈیبگ لاگ دیکھیں</string>
     <string name="status_subtitle_muted">خاموش — کال جاری ہے</string>
+    <string name="status_subtitle_muted_manual">خاموش</string>
 
     <string name="latency_format">%1$d ms</string>
     <string name="latency_unavailable">— ms</string>
@@ -76,5 +78,5 @@
 
     <string name="btn_share_event">ایونٹ شیئر کریں</string>
     <string name="share_event_chooser_title">سننے کا لنک شیئر کریں</string>
-    <string name="share_event_unavailable">سننے کا لنک ابھی دستیاب نہیں — براہ راست نشر شروع کریں اور تھوڑا انتظار کریں</string>
+    <string name="share_event_unavailable">سننے کا لنک ترتیب نہیں دیا گیا — Settings/secrets.properties چیک کریں</string>
 </resources>
