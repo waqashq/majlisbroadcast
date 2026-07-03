@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.graphics.Typeface
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -20,24 +21,24 @@ import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.FileProvider
 import java.util.Locale
 
 /**
- * Phase 5: the real (minimal) app UI -- see majlisbroadcast.md section 8.
- * Go Live/Stop, status, mic level/clipping meter, elapsed time, a
- * view-only server panel, lightweight diagnostics, and an exportable
- * rolling debug log. Bilingual via res/values (English) and
- * res/values-ur (Urdu); RTL is handled by the system since supportsRtl is
- * set and nothing here hardcodes left/right.
+ * Phase 5/7: the real (minimal) app UI -- see majlisbroadcast.md section 8.
+ * Go Live/Stop, status, mic level/clipping meter, elapsed time, live
+ * listener count, and lightweight diagnostics. Bilingual via res/values
+ * (English) and res/values-ur (Urdu); RTL is handled by the system since
+ * supportsRtl is set and nothing here hardcodes left/right.
+ *
+ * Phase 7 moved the view-only server panel and the debug log viewer out to
+ * SettingsActivity to keep this screen bare per section 8, and added the
+ * Settings entry point (top-right) plus a small cosmetic pass (UiTheme).
  *
  * The Phase 1 local-file test harness (AacFileRecorder) is no longer wired
  * into this screen -- it already served its purpose (validating capture/
- * encode/ADTS offline) and section 8 wants the shipped UI to "stay bare."
- * The class itself is left in the repo in case it's useful for future
- * debugging.
+ * encode/ADTS offline). The class itself is left in the repo in case it's
+ * useful for future debugging.
  */
 class MainActivity : AppCompatActivity() {
 
@@ -54,8 +55,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var elapsedText: TextView
     private lateinit var micLevelBar: ProgressBar
     private lateinit var micClippingText: TextView
-    private lateinit var serverPanelText: TextView
     private lateinit var diagnosticsText: TextView
+    private lateinit var listenerCountText: TextView
     private lateinit var batteryStateLabel: TextView
     private lateinit var versionLabel: TextView
 
@@ -102,30 +103,54 @@ class MainActivity : AppCompatActivity() {
             BroadcastService.state == BroadcastEngine.State.RECONNECTING
         ) {
             isLive = true
-            goLiveButton.text = getString(R.string.btn_stop_live)
+            updateGoLiveButtonStyle()
             uiHandler.post(livePoller)
         }
     }
 
     private fun buildUi() {
-        val root = LinearLayout(this).apply {
+        val topBar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.END
+            setPadding(24, 24, 24, 0)
+        }
+        val settingsButton = Button(this).apply {
+            text = getString(R.string.btn_settings)
+            textSize = 12f
+        }
+        settingsButton.setOnClickListener {
+            startActivity(Intent(this, SettingsActivity::class.java))
+        }
+        topBar.addView(settingsButton)
+
+        val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            setPadding(48, 64, 48, 48)
+            setPadding(48, 32, 48, 48)
         }
 
         statusText = TextView(this).apply {
             textSize = 20f
             gravity = Gravity.CENTER
+            setTypeface(typeface, Typeface.BOLD)
         }
         goLiveButton = Button(this).apply {
             text = getString(R.string.btn_go_live)
             textSize = 18f
+            setTextColor(Color.WHITE)
+            setPadding(64, 32, 64, 32)
         }
         goLiveButton.setOnClickListener { onGoLiveClicked() }
 
         elapsedText = TextView(this).apply { textSize = 14f }
 
+        // ---- Mic meter card ----
+        val micCard = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            background = UiTheme.cardBackground()
+            setPadding(32, 24, 32, 24)
+        }
         val micLevelLabel = TextView(this).apply {
             text = getString(R.string.mic_level_label)
             textSize = 12f
@@ -137,65 +162,68 @@ class MainActivity : AppCompatActivity() {
         micClippingText = TextView(this).apply {
             text = getString(R.string.mic_clipping_warning)
             textSize = 12f
-            setTextColor(Color.RED)
+            setTextColor(UiTheme.STOP_RED)
             visibility = View.GONE
         }
-
-        serverPanelText = TextView(this).apply {
-            textSize = 12f
-            alpha = 0.8f
-            gravity = Gravity.CENTER
+        micLevelBar.layoutParams = LinearLayout.LayoutParams(600, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+            topMargin = 8
+        }
+        listOf(micLevelLabel, micLevelBar, micClippingText).forEach {
+            micCard.addView(it, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 4 })
         }
 
+        // ---- Diagnostics card ----
+        val diagCard = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            background = UiTheme.cardBackground()
+            setPadding(32, 24, 32, 24)
+        }
         diagnosticsText = TextView(this).apply {
             textSize = 11f
             alpha = 0.7f
             gravity = Gravity.CENTER
         }
-
-        val viewLogButton = Button(this).apply {
-            text = getString(R.string.btn_view_log)
-            textSize = 11f
+        listenerCountText = TextView(this).apply {
+            textSize = 13f
+            gravity = Gravity.CENTER
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(UiTheme.ACCENT_GOLD)
+            visibility = View.GONE
         }
-        viewLogButton.setOnClickListener { showDebugLogDialog() }
+        listOf(diagnosticsText, listenerCountText).forEach {
+            diagCard.addView(it, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 6 })
+        }
 
         batteryStateLabel = TextView(this).apply { textSize = 11f; alpha = 0.6f }
         versionLabel = TextView(this).apply { textSize = 11f; alpha = 0.6f }
 
         listOf(
             statusText, goLiveButton, elapsedText,
-            micLevelLabel, micLevelBar, micClippingText,
-            serverPanelText, diagnosticsText, viewLogButton,
+            micCard, diagCard,
             batteryStateLabel, versionLabel
         ).forEach {
-            root.addView(
+            content.addView(
                 it,
                 LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.WRAP_CONTENT,
                     LinearLayout.LayoutParams.WRAP_CONTENT
-                ).apply { topMargin = 20 }
+                ).apply { topMargin = 24 }
             )
         }
-        // Horizontal ProgressBar needs an explicit width -- WRAP_CONTENT
-        // collapses it to almost nothing.
-        micLevelBar.layoutParams = LinearLayout.LayoutParams(600, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-            topMargin = 8
-        }
 
-        setContentView(ScrollView(this).apply { addView(root) })
+        val outer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        outer.addView(topBar, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        outer.addView(content, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
 
+        setContentView(ScrollView(this).apply { addView(outer) })
+
+        updateGoLiveButtonStyle()
         refreshStaticInfo()
     }
 
     private fun refreshStaticInfo() {
         if (!isLive) statusText.text = getString(R.string.status_live_stopped)
-
-        val serverLine = if (BuildConfig.AZURACAST_HOST.isNotBlank()) {
-            getString(R.string.server_panel_host_port, BuildConfig.AZURACAST_HOST, BuildConfig.AZURACAST_PORT)
-        } else {
-            getString(R.string.server_panel_not_configured)
-        }
-        serverPanelText.text = getString(R.string.server_panel_title) + "\n" + serverLine
 
         versionLabel.text = getString(R.string.build_version, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE)
 
@@ -203,6 +231,12 @@ class MainActivity : AppCompatActivity() {
         batteryStateLabel.text = getString(
             if (ignoring) R.string.battery_state_ignoring else R.string.battery_state_not_ignoring
         )
+    }
+
+    /** Recolors/relabels the Go Live button for its current idle/live state (Phase 7 cosmetic pass). */
+    private fun updateGoLiveButtonStyle() {
+        goLiveButton.text = getString(if (isLive) R.string.btn_stop_live else R.string.btn_go_live)
+        goLiveButton.background = UiTheme.pillButtonBackground(if (isLive) UiTheme.STOP_RED else UiTheme.PRIMARY_GREEN)
     }
 
     // ================= First-run permission chain (section 7) =================
@@ -260,7 +294,7 @@ class MainActivity : AppCompatActivity() {
             DebugLog.log("Go Live tapped")
             BroadcastService.start(this)
             isLive = true
-            goLiveButton.text = getString(R.string.btn_stop_live)
+            updateGoLiveButtonStyle()
             statusText.text = getString(
                 R.string.status_live_connecting, BuildConfig.AZURACAST_HOST, BuildConfig.AZURACAST_PORT
             )
@@ -269,9 +303,10 @@ class MainActivity : AppCompatActivity() {
             DebugLog.log("Stop tapped")
             BroadcastService.stop(this)
             isLive = false
-            goLiveButton.text = getString(R.string.btn_go_live)
+            updateGoLiveButtonStyle()
             statusText.text = getString(R.string.status_live_stopped)
             elapsedText.text = ""
+            listenerCountText.visibility = View.GONE
             uiHandler.removeCallbacks(livePoller)
         }
     }
@@ -292,9 +327,10 @@ class MainActivity : AppCompatActivity() {
             BroadcastEngine.State.STOPPED, BroadcastEngine.State.IDLE -> {
                 if (isLive) {
                     isLive = false
-                    goLiveButton.text = getString(R.string.btn_go_live)
+                    updateGoLiveButtonStyle()
                     statusText.text = getString(R.string.status_live_stopped)
                     elapsedText.text = ""
+                    listenerCountText.visibility = View.GONE
                     uiHandler.removeCallbacks(livePoller)
                 }
             }
@@ -307,6 +343,17 @@ class MainActivity : AppCompatActivity() {
 
         micLevelBar.progress = BroadcastService.micLevel
         micClippingText.visibility = if (BroadcastService.micClipping) View.VISIBLE else View.GONE
+
+        val count = BroadcastService.listenerCount
+        if (isLive && count != null) {
+            listenerCountText.text = getString(R.string.listener_count_label, count)
+            listenerCountText.visibility = View.VISIBLE
+        } else if (isLive) {
+            listenerCountText.text = getString(R.string.listener_count_unavailable)
+            listenerCountText.visibility = View.VISIBLE
+        } else {
+            listenerCountText.visibility = View.GONE
+        }
 
         // Buffering-latency estimate: how long audio currently sits in our
         // own queue + the coalescing window -- NOT true end-to-end/network
@@ -333,39 +380,6 @@ class MainActivity : AppCompatActivity() {
         } else {
             String.format(Locale.US, "%02d:%02d", m, s)
         }
-    }
-
-    // ================= Debug log (section 9) =================
-
-    private fun showDebugLogDialog() {
-        val lines = DebugLog.snapshot()
-        val text = if (lines.isEmpty()) getString(R.string.log_empty) else lines.joinToString("\n")
-
-        val logView = TextView(this).apply {
-            this.text = text
-            textSize = 12f
-            setPadding(32, 32, 32, 32)
-        }
-        val scroll = ScrollView(this).apply { addView(logView) }
-
-        AlertDialog.Builder(this)
-            .setTitle(getString(R.string.log_title))
-            .setView(scroll)
-            .setPositiveButton(getString(R.string.btn_export_log)) { _, _ -> exportDebugLog() }
-            .setNegativeButton(getString(R.string.btn_close_log), null)
-            .show()
-    }
-
-    private fun exportDebugLog() {
-        val file = DebugLog.export(this)
-        android.widget.Toast.makeText(this, getString(R.string.log_exported, file.name), android.widget.Toast.LENGTH_SHORT).show()
-        val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
-        val intent = Intent(Intent.ACTION_SEND).apply {
-            type = "text/plain"
-            putExtra(Intent.EXTRA_STREAM, uri)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-        startActivity(Intent.createChooser(intent, getString(R.string.log_share_title)))
     }
 
     override fun onDestroy() {

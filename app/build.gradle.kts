@@ -20,6 +20,30 @@ val secrets = Properties().apply {
 }
 fun secret(key: String, default: String = "") = secrets.getProperty(key, default)
 
+// Phase 7: the AzuraCast now-playing API lives on the station's normal web
+// front end (HTTPS, standard port), which is a completely different
+// service from the raw source-ingest socket on AZURACAST_PORT (see
+// PROTOCOL-NOTES.md -- that port is plain HTTP, no TLS, source protocol
+// only). Defaults to "https://" + the same host, since that's correct for
+// most single-domain AzuraCast setups; override with an optional
+// azuracast.api_base_url key in secrets.properties if the web panel lives
+// somewhere else.
+val defaultApiBaseUrl = "https://${secret("azuracast.host")}"
+val apiBaseUrl = secret("azuracast.api_base_url", defaultApiBaseUrl)
+
+// Phase 7: release signing. Real keystore path/passwords are never
+// committed -- read at build time from a local, git-ignored
+// keystore.properties (same pattern as secrets.properties). Until that
+// file exists, the release build type is simply left unsigned rather than
+// failing the build, so debug work is never blocked on having a keystore
+// set up.
+val keystorePropsFile = rootProject.file("keystore.properties")
+val keystoreProps = Properties().apply {
+    if (keystorePropsFile.exists()) {
+        FileInputStream(keystorePropsFile).use { load(it) }
+    }
+}
+
 android {
     namespace = "org.waqashq.majlisbroadcast"
     compileSdk = 34
@@ -28,13 +52,25 @@ android {
         applicationId = "org.waqashq.majlisbroadcast"
         minSdk = 26
         targetSdk = 34
-        versionCode = 10
-        versionName = "p6.4"
+        versionCode = 11
+        versionName = "p7.1"
 
         buildConfigField("String", "AZURACAST_HOST", "\"${secret("azuracast.host")}\"")
         buildConfigField("int", "AZURACAST_PORT", secret("azuracast.port", "0"))
         buildConfigField("String", "AZURACAST_USERNAME", "\"${secret("azuracast.username")}\"")
         buildConfigField("String", "AZURACAST_PASSWORD", "\"${secret("azuracast.password")}\"")
+        buildConfigField("String", "AZURACAST_API_BASE_URL", "\"$apiBaseUrl\"")
+    }
+
+    signingConfigs {
+        if (keystorePropsFile.exists()) {
+            create("release") {
+                storeFile = rootProject.file(keystoreProps.getProperty("storeFile", ""))
+                storePassword = keystoreProps.getProperty("storePassword", "")
+                keyAlias = keystoreProps.getProperty("keyAlias", "")
+                keyPassword = keystoreProps.getProperty("keyPassword", "")
+            }
+        }
     }
 
     buildFeatures {
@@ -44,6 +80,9 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
+            if (keystorePropsFile.exists()) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 

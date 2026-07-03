@@ -17,9 +17,15 @@ secrets.properties
 secrets.*.properties
 *.secrets
 
-# --- Keystores ---
+# --- Keystores & release signing ---
+# The repo is public -- the keystore itself AND the properties file
+# pointing to it/holding its passwords must never be committed. Same
+# pattern as secrets.properties above. Losing this keystore means losing
+# the ability to ever publish an updated build under the same app identity
+# -- back it up somewhere safe outside this repo.
 *.jks
 *.keystore
+keystore.properties
 
 # --- IDE / OS ---
 .idea/

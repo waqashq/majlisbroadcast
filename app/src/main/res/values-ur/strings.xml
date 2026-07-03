@@ -39,4 +39,15 @@
 
     <string name="battery_state_ignoring">بیٹری آپٹیمائزیشن: نظر انداز (بہتر)</string>
     <string name="battery_state_not_ignoring">بیٹری آپٹیمائزیشن: نظر انداز نہیں</string>
+
+    <string name="btn_settings">ترتیبات</string>
+    <string name="settings_title">ترتیبات</string>
+
+    <string name="language_section_title">زبان</string>
+    <string name="language_system">سسٹم کی طے شدہ زبان</string>
+    <string name="language_english">English</string>
+    <string name="language_urdu">اردو</string>
+
+    <string name="listener_count_label">سامعین: %1$d</string>
+    <string name="listener_count_unavailable">سامعین: —</string>
 </resources>

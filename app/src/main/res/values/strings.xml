@@ -39,4 +39,15 @@
 
     <string name="battery_state_ignoring">Battery optimization: ignored (good)</string>
     <string name="battery_state_not_ignoring">Battery optimization: NOT ignored</string>
+
+    <string name="btn_settings">Settings</string>
+    <string name="settings_title">Settings</string>
+
+    <string name="language_section_title">Language</string>
+    <string name="language_system">System default</string>
+    <string name="language_english">English</string>
+    <string name="language_urdu">اردو</string>
+
+    <string name="listener_count_label">Listeners: %1$d</string>
+    <string name="listener_count_unavailable">Listeners: —</string>
 </resources>

@@ -41,6 +41,12 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
         private const val NOTIFICATION_ID = 1
         private const val ACTION_STOP = "org.waqashq.majlisbroadcast.action.STOP"
 
+        // Phase 7: how often to poll AzuraCast's now-playing API while
+        // live. This is a cosmetic nicety, not part of the streaming
+        // pipeline -- 30s is plenty fresh for a listener count display and
+        // keeps it from being a meaningful battery/data cost.
+        private const val LISTENER_POLL_INTERVAL_MS = 30_000L
+
         @Volatile var state: BroadcastEngine.State = BroadcastEngine.State.IDLE
             private set
         @Volatile var lastError: String? = null
@@ -64,6 +70,9 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
         /** SystemClock.elapsedRealtime() when Go Live was tapped, or 0 if never started this session. */
         @Volatile var sessionStartRealtime: Long = 0
             private set
+        /** Current listener count from AzuraCast's now-playing API, or null if unknown/unavailable (Phase 7). */
+        @Volatile var listenerCount: Int? = null
+            private set
 
         fun start(context: Context) {
             val intent = Intent(context, BroadcastService::class.java)
@@ -79,6 +88,9 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
     private var engine: BroadcastEngine? = null
     private var wakeLock: PowerManager.WakeLock? = null
     private var wifiLock: WifiManager.WifiLock? = null
+
+    private var listenerPollThread: Thread? = null
+    @Volatile private var listenerPolling = false
 
     private var connectivityManager: ConnectivityManager? = null
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
@@ -129,6 +141,7 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
 
             requestAudioFocus(am)
             registerNetworkCallback()
+            startListenerPolling()
         }
         return START_NOT_STICKY
     }
@@ -144,6 +157,7 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
         unregisterNetworkCallback()
         abandonAudioFocus()
         releaseLocks()
+        stopListenerPolling()
         state = BroadcastEngine.State.STOPPED
         sessionStartRealtime = 0
         stopSelf()
@@ -156,6 +170,7 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
         unregisterNetworkCallback()
         abandonAudioFocus()
         releaseLocks()
+        stopListenerPolling()
         sessionStartRealtime = 0
         super.onDestroy()
     }
@@ -301,6 +316,40 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
         } else {
             base
         }
+    }
+
+    // ================= Listener count (Phase 7) =================
+
+    /**
+     * Polls AzuraCast's now-playing API every LISTENER_POLL_INTERVAL_MS
+     * while live. Runs on its own plain thread rather than the writer/
+     * capture threads -- this must never share a thread with, block, or
+     * otherwise affect the actual streaming pipeline (section 0: "touches
+     * nothing in the streaming pipeline"). Any fetch failure just leaves
+     * listenerCount as whatever it last was (or null); never surfaced as
+     * an error to the broadcaster.
+     */
+    private fun startListenerPolling() {
+        listenerPolling = true
+        listenerPollThread = Thread({
+            while (listenerPolling) {
+                if (state == BroadcastEngine.State.LIVE) {
+                    listenerCount = ListenerCountFetcher.fetch(BuildConfig.AZURACAST_API_BASE_URL)
+                }
+                try {
+                    Thread.sleep(LISTENER_POLL_INTERVAL_MS)
+                } catch (_: InterruptedException) {
+                    break
+                }
+            }
+        }, "BroadcastService-listenerPoll").apply { start() }
+    }
+
+    private fun stopListenerPolling() {
+        listenerPolling = false
+        listenerPollThread?.interrupt()
+        listenerPollThread = null
+        listenerCount = null
     }
 
     // ================= Wake / WiFi locks =================

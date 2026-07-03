@@ -19,7 +19,43 @@ public. Real credentials live in a local `secrets.properties` (git-ignored);
 use the placeholder keys in that file as the template. If a credential is
 ever committed by accident, stop and rotate the AzuraCast source password.
 
+`secrets.properties` keys:
+
+```
+azuracast.host=your.host.here
+azuracast.port=8005
+azuracast.username=your-source-username
+azuracast.password=your-source-password
+# Optional -- only needed if the AzuraCast web panel/API is not reachable
+# at https://<azuracast.host>. Used only for the Phase 7 listener count.
+azuracast.api_base_url=https://your.host.here
+```
+
+## Release signing (Phase 7)
+
+Signing a release build requires a local, git-ignored `keystore.properties`
+pointing at a keystore file that is *also* never committed. Until
+`keystore.properties` exists, `assembleRelease` just produces an unsigned
+APK -- debug builds are never blocked on this.
+
+`keystore.properties` keys:
+
+```
+storeFile=../majlisbroadcast-release.jks
+storePassword=your-keystore-password
+keyAlias=majlisbroadcast
+keyPassword=your-key-password
+```
+
+Generating the keystore itself and backing it up safely is a one-time,
+user-driven step -- see chat history / ask for the walkthrough. Losing this
+file means losing the ability to ever ship an update under the same app
+identity.
+
 ## Status
 
 Building in strict phase order per `majlisbroadcast.md` section 12.
-Currently: Phase 6 (Gate 2: long-run validation) complete -- all conditions (unplugged, screen off, network handover both directions, Bluetooth SCO refusal, real phone call, battery saver) verified against the live listener stream. Phases 0, 0.5 Gate 1, 1, 2, 3, 4, 5, and 6 complete. Next: Phase 7 (polish).
+Currently: Phase 7 (polish) -- live listener count (AzuraCast now-playing
+API), a Settings screen with an in-app English/Urdu language toggle,
+cosmetic UI pass, and release-signing build infra. Custom app icon pending
+(user-provided). Phases 0, 0.5 Gate 1, 1, 2, 3, 4, 5, and 6 complete.

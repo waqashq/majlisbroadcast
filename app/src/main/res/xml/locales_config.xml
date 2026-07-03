@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Phase 7: declares the app's supported per-app languages so Android 13+
+     surfaces them in system Settings > App info > Language, in addition to
+     the in-app toggle on SettingsActivity (which uses AppCompatDelegate and
+     works back to minSdk 26). -->
+<locale-config xmlns:android="http://schemas.android.com/apk/res/android">
+    <locale android:name="en" />
+    <locale android:name="ur" />
+</locale-config>
