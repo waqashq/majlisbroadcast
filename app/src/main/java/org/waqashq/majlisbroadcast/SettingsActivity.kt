@@ -263,12 +263,22 @@ class SettingsActivity : AppCompatActivity() {
         val lines = DebugLog.snapshot()
         val text = if (lines.isEmpty()) getString(R.string.log_empty) else lines.joinToString("\n")
 
+        // Theme_AppCompat_Dialog's default body-text color is a mid-gray
+        // meant for a lighter dialog background, which made the log almost
+        // unreadable against this dark theme -- set both the background and
+        // text color explicitly here instead of relying on the dialog
+        // theme's defaults.
         val logView = TextView(this).apply {
             this.text = text
             textSize = 12f
+            setTextColor(UiTheme.STUDIO_TEXT_PRIMARY)
+            setBackgroundColor(UiTheme.STUDIO_BG)
             setPadding(32, 32, 32, 32)
         }
-        val scroll = ScrollView(this).apply { addView(logView) }
+        val scroll = ScrollView(this).apply {
+            addView(logView)
+            setBackgroundColor(UiTheme.STUDIO_BG)
+        }
 
         // A built-in AppCompat *always-dark* dialog style (not DayNight),
         // to match the rest of the app rather than following the system

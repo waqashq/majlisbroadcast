@@ -62,7 +62,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var bitrateText: TextView
     private lateinit var micClippingText: TextView
     private lateinit var listenerCountText: TextView
-    private lateinit var shareButton: TextView
+    private lateinit var shareButton: LinearLayout
 
     private var isLive = false
     private val uiHandler = Handler(Looper.getMainLooper())
@@ -278,18 +278,35 @@ class MainActivity : AppCompatActivity() {
 
         // ---- Listeners + Share (below the card) ----
         listenerCountText = TextView(this).apply {
-            textSize = 14f
+            textSize = 18f
             setTypeface(typeface, Typeface.BOLD)
             setTextColor(UiTheme.STUDIO_ON_AIR_GREEN)
             gravity = Gravity.CENTER
         }
-        shareButton = TextView(this).apply {
+        val shareIcon = ImageView(this).apply {
+            setImageResource(R.drawable.ic_share)
+            setColorFilter(UiTheme.STUDIO_ON_AIR_GREEN)
+            layoutParams = LinearLayout.LayoutParams(30, 30)
+        }
+        val shareLabel = TextView(this).apply {
             text = getString(R.string.btn_share_event)
-            textSize = 14f
+            textSize = 15f
             setTypeface(typeface, Typeface.BOLD)
             setTextColor(UiTheme.STUDIO_ON_AIR_GREEN)
             gravity = Gravity.CENTER
-            setPadding(0, 12, 0, 12)
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                marginStart = 16
+            }
+        }
+        shareButton = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            background = UiTheme.outlinePillBackground(UiTheme.STUDIO_ON_AIR_GREEN)
+            setPadding(0, 22, 0, 22)
+            isClickable = true
+            isFocusable = true
+            addView(shareIcon)
+            addView(shareLabel)
         }
         shareButton.setOnClickListener { onShareClicked() }
 
