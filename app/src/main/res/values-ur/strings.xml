@@ -5,7 +5,7 @@
 
     <string name="btn_go_live">براہ راست نشر کریں</string>
     <string name="btn_stop_live">روکیں</string>
-    <string name="status_live_missing_secrets">ترتیب نامکمل ہے — پراجیکٹ کی secrets.properties میں azuracast.host / port / username / password شامل کریں اور دوبارہ بنائیں۔</string>
+    <string name="status_live_missing_secrets">ترتیب نہیں دی گئی -- سیٹنگز میں جا کر اپنے سرور کی تفصیلات درج کریں۔</string>
     <string name="status_live_connecting">%1$s:%2$d سے رابطہ ہو رہا ہے…</string>
     <string name="status_live_on_air">براہ راست</string>
     <string name="status_live_reconnecting">دوبارہ رابطہ ہو رہا ہے…</string>
@@ -19,9 +19,18 @@
 
     <string name="elapsed_time_format">گزرا وقت: %1$s</string>
 
-    <string name="server_panel_title">سرور (صرف دیکھنے کے لیے)</string>
-    <string name="server_panel_host_port">%1$s : %2$d</string>
-    <string name="server_panel_not_configured">ترتیب نہیں دی گئی</string>
+    <string name="server_panel_title">سرور کی ترتیبات</string>
+    <string name="server_field_host_label">سرور ہوسٹ</string>
+    <string name="server_field_port_label">پورٹ</string>
+    <string name="server_field_mount_label">ماؤنٹ پوائنٹ (اختیاری)</string>
+    <string name="server_field_username_label">صارف نام</string>
+    <string name="server_field_password_label">پاس ورڈ</string>
+    <string name="server_sample_rate_label">سیمپل ریٹ</string>
+    <string name="server_bit_rate_label">بٹ ریٹ</string>
+    <string name="btn_save_server">سرور کی ترتیبات محفوظ کریں</string>
+    <string name="server_saved_toast">سرور کی ترتیبات محفوظ ہو گئیں</string>
+    <string name="server_validation_error">سرور ہوسٹ اور درست پورٹ درج کریں (1-65535)</string>
+    <string name="server_live_edit_notice">تبدیلیاں اگلی بار لائیو ہونے پر لاگو ہوں گی</string>
 
     <string name="diagnostics_title">تشخیصی معلومات</string>
     <string name="diagnostics_line">دوبارہ رابطے: %1$d\nضائع شدہ فریمز: %2$d (%3$d مرتبہ)\nقطار: %4$d/%5$d فریمز\nبٹ ریٹ: %6$d kbps\nبفرنگ تاخیر (تخمینہ): ~%7$d ms\nبلوٹوتھ SCO مسترد: %8$d بار</string>

@@ -12,6 +12,28 @@ Single-user, single-station, not distributed, not on the Play Store.
 for scope, architecture, and the strict phase-by-phase build order (see its
 section 12). Read it before making changes.
 
+## Server settings (Phase 8 -- runtime, in-app)
+
+As of Phase 8, the AzuraCast host/port/mount/username/password and the
+audio sample rate/bit rate are entered and edited directly in the app
+(Settings screen), not at build time. They're stored in an encrypted,
+on-device-only SharedPreferences file (AndroidX Security, Android
+Keystore-backed) and persist across app restarts.
+
+`secrets.properties` (below) is still used, but only as a one-time seed
+the *first* time the app runs after a fresh install -- after that, the
+Settings screen is the only source of truth, and `secrets.properties` /
+`BuildConfig` values are never read again. This means an existing
+install's in-app settings survive a rebuild even if `secrets.properties`
+changes or is missing.
+
+The optional `azuracast.api_base_url` override (below) is no longer read
+anywhere at runtime -- the now-playing/listener-count API base URL is
+always derived as `https://` + whatever host is currently saved in
+Settings. It's left in `secrets.properties`/`build.gradle.kts` as
+harmless dead config rather than removed, to keep this diff small; safe
+to ignore.
+
 ## Secrets
 
 Server host, mount, and source password are never committed — this repo is
@@ -19,15 +41,14 @@ public. Real credentials live in a local `secrets.properties` (git-ignored);
 use the placeholder keys in that file as the template. If a credential is
 ever committed by accident, stop and rotate the AzuraCast source password.
 
-`secrets.properties` keys:
+`secrets.properties` keys (first-run seed only -- see above):
 
 ```
 azuracast.host=your.host.here
 azuracast.port=8005
 azuracast.username=your-source-username
 azuracast.password=your-source-password
-# Optional -- only needed if the AzuraCast web panel/API is not reachable
-# at https://<azuracast.host>. Used only for the Phase 7 listener count.
+# No longer read at runtime (Phase 8) -- see "Server settings" above.
 azuracast.api_base_url=https://your.host.here
 # Optional but recommended -- AzuraCast's all-stations /api/nowplaying
 # endpoint only lists stations flagged "Public" and has a known bug

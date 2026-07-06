@@ -52,8 +52,8 @@ android {
         applicationId = "org.waqashq.majlisbroadcast"
         minSdk = 26
         targetSdk = 34
-        versionCode = 19
-        versionName = "p7.9"
+        versionCode = 20
+        versionName = "p8.0"
 
         buildConfigField("String", "AZURACAST_HOST", "\"${secret("azuracast.host")}\"")
         buildConfigField("int", "AZURACAST_PORT", secret("azuracast.port", "0"))
@@ -106,4 +106,10 @@ dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("androidx.activity:activity-ktx:1.9.1")
+    // Phase 8: encrypted on-device storage for the runtime-editable server
+    // settings (source password lives here now instead of only at build
+    // time). Pinned to the 1.0.0 stable release rather than the 1.1.0-alpha
+    // line, which has since deprecated EncryptedSharedPreferences in favor
+    // of a DataStore+Tink rewrite -- overkill for this single-user app.
+    implementation("androidx.security:security-crypto:1.0.0")
 }

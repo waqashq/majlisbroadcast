@@ -470,7 +470,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         if (!isLive) {
-            if (BuildConfig.AZURACAST_HOST.isBlank() || BuildConfig.AZURACAST_PORT == 0) {
+            if (!AppSettings.isConfigured(this)) {
                 statusSubtitle.text = getString(R.string.status_live_missing_secrets)
                 return
             }
@@ -525,7 +525,7 @@ class MainActivity : AppCompatActivity() {
         // back to the station's own web root, which for a single-station
         // setup like this one is the station's public page.
         val url = BroadcastService.publicPlayerUrl
-            ?: BuildConfig.AZURACAST_API_BASE_URL.takeIf { it.isNotBlank() }
+            ?: AppSettings.apiBaseUrl(this).takeIf { AppSettings.isConfigured(this) }
         if (url.isNullOrBlank()) {
             Toast.makeText(this, getString(R.string.share_event_unavailable), Toast.LENGTH_SHORT).show()
             return

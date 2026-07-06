@@ -37,8 +37,20 @@ class IcecastUploader(
     private val host: String,
     private val port: Int,
     private val username: String,
-    private val password: String
+    private val password: String,
+    mount: String = ""
 ) {
+    // Phase 8: the mount point is now user-editable (Settings); this
+    // deployment historically used the root path with no named mount
+    // (see PROTOCOL-NOTES.md), so blank still means "/" exactly as before.
+    private val path: String = mount.trim().let {
+        when {
+            it.isEmpty() -> "/"
+            it.startsWith("/") -> it
+            else -> "/$it"
+        }
+    }
+
     companion object {
         private const val CONNECT_TIMEOUT_MS = 8_000
         private const val HANDSHAKE_READ_TIMEOUT_MS = 8_000
@@ -66,7 +78,7 @@ class IcecastUploader(
             "$username:$password".toByteArray(Charsets.UTF_8), Base64.NO_WRAP
         )
         val request = buildString {
-            append("PUT / HTTP/1.0\r\n")
+            append("PUT $path HTTP/1.0\r\n")
             append("Host: $host:$port\r\n")
             append("Authorization: Basic $credentials\r\n")
             append("Content-Type: audio/aac\r\n")

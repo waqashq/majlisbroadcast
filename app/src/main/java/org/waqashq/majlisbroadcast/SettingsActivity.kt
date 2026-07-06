@@ -4,11 +4,14 @@ import android.content.Intent
 import android.graphics.Typeface
 import android.os.Bundle
 import android.os.PowerManager
+import android.text.InputType
 import android.view.Gravity
 import android.widget.Button
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
@@ -17,8 +20,9 @@ import androidx.core.os.LocaleListCompat
 
 /**
  * Phase 7+: settings/configuration screen, split out from the main Go-Live
- * screen so that one stays bare per section 8. Houses the view-only server
- * panel, diagnostics + battery state, the debug log viewer, and the in-app
+ * screen so that one stays bare per section 8. Houses the editable server
+ * settings panel (Phase 8 -- host/port/mount/username/password/sample
+ * rate/bit rate, encrypted on-device via AppSettings), diagnostics + battery state, the debug log viewer, and the in-app
  * language toggle (English / Urdu / system default) via AndroidX's per-app
  * language API -- works down to minSdk 26, and on API 33+ also shows up in
  * system Settings > App info > Language via the manifest's localeConfig
@@ -34,12 +38,22 @@ class SettingsActivity : AppCompatActivity() {
     private val prefsName = "majlis_prefs"
     private val prefLanguageChoice = "language_choice"
 
-    // Mirrors BroadcastEngine's private constants -- purely for display.
+    // Mirrors BroadcastEngine's queue-capacity constant -- purely for display.
     private val queueCapacityDisplay = 150
-    private val configuredBitrateKbps = 64
 
     private lateinit var diagnosticsText: TextView
     private lateinit var batteryStateLabel: TextView
+
+    // Phase 8: server settings form fields.
+    private lateinit var hostField: EditText
+    private lateinit var portField: EditText
+    private lateinit var mountField: EditText
+    private lateinit var usernameField: EditText
+    private lateinit var passwordField: EditText
+    private lateinit var sampleRateRow: LinearLayout
+    private lateinit var bitRateRow: LinearLayout
+    private var selectedSampleRate = AppSettings.DEFAULT_SAMPLE_RATE
+    private var selectedBitRateBps = AppSettings.DEFAULT_BIT_RATE_BPS
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -64,7 +78,7 @@ class SettingsActivity : AppCompatActivity() {
             BroadcastService.dropCount,
             BroadcastService.burstDropEvents,
             BroadcastService.queueDepth, queueCapacityDisplay,
-            configuredBitrateKbps,
+            AppSettings.bitRateBps(this) / 1000,
             latencyEstimateMs,
             BroadcastService.scoRefusalCount
         )
@@ -133,17 +147,64 @@ class SettingsActivity : AppCompatActivity() {
         }
         languageCard.addView(languageRow, topMarginParams(20))
 
-        // ---- Server card (view-only) ----
+        // ---- Server card (Phase 8: editable, saved on-device) ----
         val serverCard = card()
         serverCard.addView(cardTitle(getString(R.string.server_panel_title)), topMarginParams(0))
-        val serverText = cardBody().apply {
-            text = if (BuildConfig.AZURACAST_HOST.isNotBlank()) {
-                getString(R.string.server_panel_host_port, BuildConfig.AZURACAST_HOST, BuildConfig.AZURACAST_PORT)
-            } else {
-                getString(R.string.server_panel_not_configured)
-            }
+
+        hostField = fieldInput(getString(R.string.server_field_host_label)).apply {
+            setText(AppSettings.host(this@SettingsActivity))
         }
-        serverCard.addView(serverText, topMarginParams(12))
+        serverCard.addView(hostField, topMarginParams(20))
+
+        portField = fieldInput(getString(R.string.server_field_port_label)).apply {
+            inputType = InputType.TYPE_CLASS_NUMBER
+            val port = AppSettings.port(this@SettingsActivity)
+            if (port != 0) setText(port.toString())
+        }
+        serverCard.addView(portField, topMarginParams(16))
+
+        mountField = fieldInput(getString(R.string.server_field_mount_label)).apply {
+            setText(AppSettings.mount(this@SettingsActivity))
+        }
+        serverCard.addView(mountField, topMarginParams(16))
+
+        usernameField = fieldInput(getString(R.string.server_field_username_label)).apply {
+            setText(AppSettings.username(this@SettingsActivity))
+        }
+        serverCard.addView(usernameField, topMarginParams(16))
+
+        passwordField = fieldInput(getString(R.string.server_field_password_label)).apply {
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+            setText(AppSettings.password(this@SettingsActivity))
+        }
+        serverCard.addView(passwordField, topMarginParams(16))
+
+        selectedSampleRate = AppSettings.sampleRate(this)
+        sampleRateRow = dropdownRow(
+            getString(R.string.server_sample_rate_label),
+            sampleRateLabel(selectedSampleRate)
+        ) { showSampleRatePicker() }
+        serverCard.addView(sampleRateRow, topMarginParams(20))
+
+        selectedBitRateBps = AppSettings.bitRateBps(this)
+        bitRateRow = dropdownRow(
+            getString(R.string.server_bit_rate_label),
+            bitRateLabel(selectedBitRateBps)
+        ) { showBitRatePicker() }
+        serverCard.addView(bitRateRow, topMarginParams(16))
+
+        val saveServerButton = pillButton(getString(R.string.btn_save_server))
+        saveServerButton.setOnClickListener { saveServerSettings() }
+        serverCard.addView(
+            saveServerButton,
+            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 24 }
+        )
+
+        val liveEditNotice = cardBody().apply {
+            text = getString(R.string.server_live_edit_notice)
+            textSize = 11f
+        }
+        serverCard.addView(liveEditNotice, topMarginParams(12))
 
         // ---- Diagnostics + battery card ----
         val diagCard = card()
@@ -233,6 +294,103 @@ class SettingsActivity : AppCompatActivity() {
 
     private fun topMarginParams(margin: Int) =
         LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = margin }
+
+    private fun fieldInput(hintText: String): EditText = EditText(this).apply {
+        hint = hintText
+        textSize = 14f
+        setTextColor(UiTheme.STUDIO_TEXT_PRIMARY)
+        setHintTextColor(UiTheme.STUDIO_TEXT_MUTED)
+        background = UiTheme.outlinePillBackground(UiTheme.STUDIO_TEXT_MUTED, strokeWidthPx = 2)
+        setPadding(28, 20, 28, 20)
+        setSingleLine(true)
+    }
+
+    /** A tappable "current value ›" row (Sample Rate / Bit Rate) that opens a picker dialog. */
+    private fun dropdownRow(label: String, initialValue: String, onClick: () -> Unit): LinearLayout {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            background = UiTheme.outlinePillBackground(UiTheme.STUDIO_TEXT_MUTED, strokeWidthPx = 2)
+            setPadding(28, 24, 28, 24)
+            isClickable = true
+            isFocusable = true
+        }
+        val labelText = TextView(this).apply {
+            text = label
+            textSize = 13f
+            setTextColor(UiTheme.STUDIO_TEXT_MUTED)
+        }
+        val valueText = TextView(this).apply {
+            text = "$initialValue  ›"
+            textSize = 14f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(UiTheme.STUDIO_TEXT_PRIMARY)
+            gravity = Gravity.END
+        }
+        row.addView(labelText, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        row.addView(valueText, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        row.setOnClickListener { onClick() }
+        row.tag = valueText
+        return row
+    }
+
+    private fun sampleRateLabel(rate: Int): String {
+        val khz = rate / 1000.0
+        val formatted = if (khz == khz.toLong().toDouble()) khz.toLong().toString() else khz.toString()
+        return "$formatted kHz"
+    }
+
+    private fun bitRateLabel(bitRateBps: Int): String = "${bitRateBps / 1000} kbps"
+
+    private fun showSampleRatePicker() {
+        val options = AppSettings.SAMPLE_RATE_OPTIONS
+        val labels = options.map { sampleRateLabel(it) }.toTypedArray()
+        val checkedIndex = options.indexOf(selectedSampleRate).coerceAtLeast(0)
+        AlertDialog.Builder(this, androidx.appcompat.R.style.Theme_AppCompat_Dialog)
+            .setTitle(getString(R.string.server_sample_rate_label))
+            .setSingleChoiceItems(labels, checkedIndex) { dialog, which ->
+                selectedSampleRate = options[which]
+                (sampleRateRow.tag as TextView).text = "${labels[which]}  ›"
+                dialog.dismiss()
+            }
+            .setNegativeButton(getString(R.string.btn_close_log), null)
+            .show()
+    }
+
+    private fun showBitRatePicker() {
+        val options = AppSettings.BIT_RATE_OPTIONS_BPS
+        val labels = options.map { bitRateLabel(it) }.toTypedArray()
+        val checkedIndex = options.indexOf(selectedBitRateBps).coerceAtLeast(0)
+        AlertDialog.Builder(this, androidx.appcompat.R.style.Theme_AppCompat_Dialog)
+            .setTitle(getString(R.string.server_bit_rate_label))
+            .setSingleChoiceItems(labels, checkedIndex) { dialog, which ->
+                selectedBitRateBps = options[which]
+                (bitRateRow.tag as TextView).text = "${labels[which]}  ›"
+                dialog.dismiss()
+            }
+            .setNegativeButton(getString(R.string.btn_close_log), null)
+            .show()
+    }
+
+    private fun saveServerSettings() {
+        val host = hostField.text.toString().trim()
+        val port = portField.text.toString().trim().toIntOrNull()
+        if (host.isBlank() || port == null || port !in 1..65535) {
+            Toast.makeText(this, getString(R.string.server_validation_error), Toast.LENGTH_LONG).show()
+            return
+        }
+        AppSettings.save(
+            this,
+            host = host,
+            port = port,
+            mount = mountField.text.toString(),
+            username = usernameField.text.toString(),
+            password = passwordField.text.toString(),
+            sampleRate = selectedSampleRate,
+            bitRateBps = selectedBitRateBps
+        )
+        Toast.makeText(this, getString(R.string.server_saved_toast), Toast.LENGTH_SHORT).show()
+    }
 
     private fun highlightActiveLanguage(system: Button, english: Button, urdu: Button) {
         val current = AppCompatDelegate.getApplicationLocales()

@@ -30,6 +30,9 @@ class BroadcastEngine(
     private val port: Int,
     private val username: String,
     private val password: String,
+    private val mount: String,
+    private val sampleRate: Int,
+    private val bitRateBps: Int,
     private val audioManager: AudioManager,
     private val listener: Listener
 ) {
@@ -46,8 +49,6 @@ class BroadcastEngine(
     }
 
     companion object {
-        private const val SAMPLE_RATE = 44100
-        private const val BIT_RATE = 64_000
         private const val CHANNEL_COUNT = 1
         private const val MIME_TYPE = MediaFormat.MIMETYPE_AUDIO_AAC
         private val SAMPLE_RATE_TABLE = intArrayOf(
@@ -55,11 +56,11 @@ class BroadcastEngine(
             16000, 12000, 11025, 8000, 7350
         )
 
-        // ~150 frames at ~23ms/frame (1024 samples @ 44.1kHz) is a ~3.4s
-        // real-time cushion: enough to absorb a brief stall without
-        // unbounded memory growth.
+        // ~150 frames is enough of a real-time cushion to absorb a brief
+        // stall without unbounded memory growth, at any configured sample
+        // rate (frame duration -- and so the cushion's real-time length --
+        // scales with sample rate; see msPerFrame below).
         private const val QUEUE_CAPACITY_FRAMES = 150
-        private const val MS_PER_FRAME = 23
 
         // Coalesce frames into one socket write, capped per section 5's
         // 100-250ms rule.
@@ -123,7 +124,12 @@ class BroadcastEngine(
 
     @Volatile private var adtsProfile = 1
     @Volatile private var adtsSampleRateIndex =
-        SAMPLE_RATE_TABLE.indexOf(SAMPLE_RATE).let { if (it < 0) 4 else it }
+        SAMPLE_RATE_TABLE.indexOf(sampleRate).let { if (it < 0) 4 else it }
+
+    // AAC-LC always encodes 1024 samples/frame regardless of sample rate,
+    // so the real-time duration of one frame scales with sampleRate --
+    // this replaces what used to be a constant tuned only for 44.1kHz.
+    private val msPerFrame: Int = (1024_000L / sampleRate).toInt().coerceAtLeast(1)
     @Volatile private var adtsChannelConfig = CHANNEL_COUNT
 
     // Phase 7+: optional local recording, entirely independent of the
@@ -274,7 +280,7 @@ class BroadcastEngine(
 
         try {
             val minBuf = AudioRecord.getMinBufferSize(
-                SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT
+                sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT
             )
             if (minBuf <= 0) throw IllegalStateException("getMinBufferSize failed ($minBuf)")
             val bufferSize = minBuf * 3
@@ -282,9 +288,9 @@ class BroadcastEngine(
             audioRecord = createAudioRecord(bufferSize)
                 ?: throw IllegalStateException("AudioRecord failed to initialize")
 
-            val format = MediaFormat.createAudioFormat(MIME_TYPE, SAMPLE_RATE, CHANNEL_COUNT).apply {
+            val format = MediaFormat.createAudioFormat(MIME_TYPE, sampleRate, CHANNEL_COUNT).apply {
                 setInteger(MediaFormat.KEY_AAC_PROFILE, MediaCodecInfo.CodecProfileLevel.AACObjectLC)
-                setInteger(MediaFormat.KEY_BIT_RATE, BIT_RATE)
+                setInteger(MediaFormat.KEY_BIT_RATE, bitRateBps)
                 setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, bufferSize)
             }
             codec = MediaCodec.createEncoderByType(MIME_TYPE).apply {
@@ -312,7 +318,7 @@ class BroadcastEngine(
                         // alive without a reconnect.
                         java.util.Arrays.fill(pcmBuf, 0.toByte())
                         read = pcmBuf.size
-                        val pacingMs = (read / 2).toLong() * 1000L / SAMPLE_RATE
+                        val pacingMs = (read / 2).toLong() * 1000L / sampleRate
                         Thread.sleep(pacingMs)
                         reportLevel(0, false)
                     } else {
@@ -326,7 +332,7 @@ class BroadcastEngine(
                     if (inputBuffer != null && read > 0) {
                         inputBuffer.clear()
                         inputBuffer.put(pcmBuf, 0, read)
-                        val ptsUs = sampleCount * 1_000_000L / SAMPLE_RATE
+                        val ptsUs = sampleCount * 1_000_000L / sampleRate
                         codec.queueInputBuffer(inIndex, 0, read, ptsUs, 0)
                         sampleCount += read / 2 // 16-bit mono: 2 bytes per sample
                     } else if (inputBuffer != null) {
@@ -340,7 +346,7 @@ class BroadcastEngine(
             while (!eosSent) {
                 val inIndex = codec.dequeueInputBuffer(10_000)
                 if (inIndex >= 0) {
-                    val ptsUs = sampleCount * 1_000_000L / SAMPLE_RATE
+                    val ptsUs = sampleCount * 1_000_000L / sampleRate
                     codec.queueInputBuffer(inIndex, 0, 0, ptsUs, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
                     eosSent = true
                 }
@@ -393,7 +399,7 @@ class BroadcastEngine(
         for (source in intArrayOf(MediaRecorder.AudioSource.UNPROCESSED, MediaRecorder.AudioSource.CAMCORDER)) {
             try {
                 val record = AudioRecord(
-                    source, SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO,
+                    source, sampleRate, AudioFormat.CHANNEL_IN_MONO,
                     AudioFormat.ENCODING_PCM_16BIT, bufferSize
                 )
                 if (record.state == AudioRecord.STATE_INITIALIZED) {
@@ -543,7 +549,7 @@ class BroadcastEngine(
                     if (!running) break
                 }
                 try {
-                    val u = IcecastUploader(host, port, username, password)
+                    val u = IcecastUploader(host, port, username, password, mount)
                     u.connectAndHandshake()
                     currentUploader = u
                     // Don't try to "catch up" on whatever backlog piled up
@@ -605,7 +611,7 @@ class BroadcastEngine(
                 if (remaining <= 0) break
                 val frame = queue.poll(remaining) ?: break
                 coalesced.write(frame)
-                approxMs += MS_PER_FRAME
+                approxMs += msPerFrame
             }
             if (coalesced.size() == 0) continue
 

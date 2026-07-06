@@ -5,7 +5,7 @@
 
     <string name="btn_go_live">Go Live</string>
     <string name="btn_stop_live">Stop</string>
-    <string name="status_live_missing_secrets">Not configured -- add azuracast.host / port / username / password to the project\'s secrets.properties and rebuild.</string>
+    <string name="status_live_missing_secrets">Not configured -- open Settings and enter your server details.</string>
     <string name="status_live_connecting">Connecting to %1$s:%2$d…</string>
     <string name="status_live_on_air">Live</string>
     <string name="status_live_reconnecting">Reconnecting…</string>
@@ -19,9 +19,18 @@
 
     <string name="elapsed_time_format">Elapsed: %1$s</string>
 
-    <string name="server_panel_title">Server (view-only)</string>
-    <string name="server_panel_host_port">%1$s : %2$d</string>
-    <string name="server_panel_not_configured">Not configured</string>
+    <string name="server_panel_title">Server Configuration</string>
+    <string name="server_field_host_label">Server Host</string>
+    <string name="server_field_port_label">Port</string>
+    <string name="server_field_mount_label">Mount Point (optional)</string>
+    <string name="server_field_username_label">Username</string>
+    <string name="server_field_password_label">Password</string>
+    <string name="server_sample_rate_label">Sample Rate</string>
+    <string name="server_bit_rate_label">Bit Rate</string>
+    <string name="btn_save_server">Save Server Settings</string>
+    <string name="server_saved_toast">Server settings saved</string>
+    <string name="server_validation_error">Enter a server host and a valid port (1-65535)</string>
+    <string name="server_live_edit_notice">Changes take effect next time you go live</string>
 
     <string name="diagnostics_title">Diagnostics</string>
     <string name="diagnostics_line">Reconnects: %1$d\nDropped frames: %2$d (%3$d bursts)\nQueue: %4$d/%5$d frames\nBitrate: %6$d kbps\nBuffering latency (est.): ~%7$d ms\nBluetooth SCO refused: %8$d times</string>

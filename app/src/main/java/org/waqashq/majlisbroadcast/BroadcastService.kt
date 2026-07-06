@@ -185,10 +185,13 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
             audioManager = am
 
             engine = BroadcastEngine(
-                BuildConfig.AZURACAST_HOST,
-                BuildConfig.AZURACAST_PORT,
-                BuildConfig.AZURACAST_USERNAME,
-                BuildConfig.AZURACAST_PASSWORD,
+                AppSettings.host(this),
+                AppSettings.port(this),
+                AppSettings.username(this),
+                AppSettings.password(this),
+                AppSettings.mount(this),
+                AppSettings.sampleRate(this),
+                AppSettings.bitRateBps(this),
                 am,
                 this
             ).also { it.start() }
@@ -382,7 +385,7 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
     private fun statusTextFor(state: BroadcastEngine.State): String {
         val base = when (state) {
             BroadcastEngine.State.CONNECTING -> getString(
-                R.string.status_live_connecting, BuildConfig.AZURACAST_HOST, BuildConfig.AZURACAST_PORT
+                R.string.status_live_connecting, AppSettings.host(this), AppSettings.port(this)
             )
             BroadcastEngine.State.LIVE -> getString(R.string.status_live_on_air)
             BroadcastEngine.State.RECONNECTING -> getString(R.string.status_live_reconnecting)
@@ -417,7 +420,7 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
             while (listenerPolling) {
                 if (state == BroadcastEngine.State.LIVE) {
                     val info = ListenerCountFetcher.fetch(
-                        BuildConfig.AZURACAST_API_BASE_URL,
+                        AppSettings.apiBaseUrl(this@BroadcastService),
                         BuildConfig.AZURACAST_STATION_SHORTCODE.takeIf { it.isNotBlank() }
                     )
                     listenerCount = info?.listenerCount
