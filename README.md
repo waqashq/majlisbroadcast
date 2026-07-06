@@ -29,6 +29,15 @@ azuracast.password=your-source-password
 # Optional -- only needed if the AzuraCast web panel/API is not reachable
 # at https://<azuracast.host>. Used only for the Phase 7 listener count.
 azuracast.api_base_url=https://your.host.here
+# Optional but recommended -- AzuraCast's all-stations /api/nowplaying
+# endpoint only lists stations flagged "Public" and has a known bug
+# returning an empty list on unauthenticated requests even when a
+# station otherwise works fine. Setting this makes the app use the
+# reliable per-station endpoint instead. Find it in the AzuraCast admin
+# panel: Station Profile page -> the "Short Name" field, or the slug
+# in the station's public page URL, e.g. the "azuratest_radio" part of
+# https://your.host.here/public/azuratest_radio
+azuracast.station_shortcode=your-station-shortcode
 ```
 
 ## Release signing (Phase 7)

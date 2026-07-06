@@ -416,7 +416,10 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
         listenerPollThread = Thread({
             while (listenerPolling) {
                 if (state == BroadcastEngine.State.LIVE) {
-                    val info = ListenerCountFetcher.fetch(BuildConfig.AZURACAST_API_BASE_URL)
+                    val info = ListenerCountFetcher.fetch(
+                        BuildConfig.AZURACAST_API_BASE_URL,
+                        BuildConfig.AZURACAST_STATION_SHORTCODE.takeIf { it.isNotBlank() }
+                    )
                     listenerCount = info?.listenerCount
                     if (info?.publicPlayerUrl != null) publicPlayerUrl = info.publicPlayerUrl
                 }

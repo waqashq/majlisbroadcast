@@ -52,14 +52,20 @@ android {
         applicationId = "org.waqashq.majlisbroadcast"
         minSdk = 26
         targetSdk = 34
-        versionCode = 17
-        versionName = "p7.7"
+        versionCode = 18
+        versionName = "p7.8"
 
         buildConfigField("String", "AZURACAST_HOST", "\"${secret("azuracast.host")}\"")
         buildConfigField("int", "AZURACAST_PORT", secret("azuracast.port", "0"))
         buildConfigField("String", "AZURACAST_USERNAME", "\"${secret("azuracast.username")}\"")
         buildConfigField("String", "AZURACAST_PASSWORD", "\"${secret("azuracast.password")}\"")
         buildConfigField("String", "AZURACAST_API_BASE_URL", "\"$apiBaseUrl\"")
+        // Optional -- see README. AzuraCast's all-stations /api/nowplaying
+        // endpoint only lists stations flagged public and has a known bug
+        // returning an empty array for unauthenticated requests; the
+        // per-station endpoint (/api/nowplaying/{shortcode}) is reliable
+        // regardless, so it's used instead whenever this is set.
+        buildConfigField("String", "AZURACAST_STATION_SHORTCODE", "\"${secret(\"azuracast.station_shortcode\")}\"")
     }
 
     signingConfigs {
