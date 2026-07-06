@@ -53,18 +53,22 @@ class LoginActivity : AppCompatActivity() {
             setBackgroundColor(UiTheme.STUDIO_BG)
         }
 
+        // Centered both ways: content sits inside a fillViewport ScrollView
+        // so it's vertically centered on screens with room to spare, but
+        // still scrolls normally once the keyboard is up and space is
+        // tight (important in Create mode with 3 fields).
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(56, 96, 56, 56)
+            gravity = Gravity.CENTER
+            setPadding(56, 56, 56, 56)
         }
 
-        val logoSize = (96 * resources.displayMetrics.density).toInt()
+        val logoSize = (152 * resources.displayMetrics.density).toInt()
         val logo = ImageView(this).apply {
             setImageResource(R.mipmap.ic_launcher_foreground)
             scaleType = ImageView.ScaleType.CENTER_CROP
             layoutParams = LinearLayout.LayoutParams(logoSize, logoSize).apply {
-                bottomMargin = (24 * resources.displayMetrics.density).toInt()
+                bottomMargin = (28 * resources.displayMetrics.density).toInt()
             }
             clipToOutline = true
             outlineProvider = object : ViewOutlineProvider() {
@@ -82,7 +86,7 @@ class LoginActivity : AppCompatActivity() {
             setTextColor(UiTheme.STUDIO_TEXT_PRIMARY)
             gravity = Gravity.CENTER
         }
-        content.addView(title, marginTop(0))
+        content.addView(title, centeredParams(0))
 
         val subtitle = TextView(this).apply {
             text = getString(if (isCreateMode) R.string.login_create_subtitle else R.string.login_subtitle)
@@ -90,7 +94,7 @@ class LoginActivity : AppCompatActivity() {
             setTextColor(UiTheme.STUDIO_TEXT_MUTED)
             gravity = Gravity.CENTER
         }
-        content.addView(subtitle, marginTop(12))
+        content.addView(subtitle, centeredParams(12))
 
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -99,14 +103,14 @@ class LoginActivity : AppCompatActivity() {
         }
 
         usernameField = input(getString(R.string.login_username_hint))
-        card.addView(usernameField)
+        card.addView(usernameField, fullWidthParams(0))
 
         passwordField = input(getString(R.string.login_password_hint), isPassword = true)
-        card.addView(passwordField, marginTop(16))
+        card.addView(passwordField, fullWidthParams(28))
 
         if (isCreateMode) {
             confirmField = input(getString(R.string.login_confirm_password_hint), isPassword = true)
-            card.addView(confirmField, marginTop(16))
+            card.addView(confirmField, fullWidthParams(20))
         }
 
         errorText = TextView(this).apply {
@@ -115,7 +119,7 @@ class LoginActivity : AppCompatActivity() {
             gravity = Gravity.CENTER
             visibility = View.INVISIBLE
         }
-        card.addView(errorText, marginTop(16))
+        card.addView(errorText, fullWidthParams(16))
 
         val actionButton = Button(this).apply {
             text = getString(if (isCreateMode) R.string.btn_create_login else R.string.btn_login)
@@ -127,17 +131,14 @@ class LoginActivity : AppCompatActivity() {
             setPadding(0, 30, 0, 30)
         }
         actionButton.setOnClickListener { if (isCreateMode) attemptCreate() else attemptLogin() }
-        card.addView(
-            actionButton,
-            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 28 }
-        )
+        card.addView(actionButton, fullWidthParams(36))
 
-        content.addView(
-            card,
-            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 32 }
-        )
+        content.addView(card, fullWidthParams(32))
 
-        val scrollView = ScrollView(this).apply { addView(content) }
+        val scrollView = ScrollView(this).apply {
+            isFillViewport = true
+            addView(content, ScrollView.LayoutParams(ScrollView.LayoutParams.MATCH_PARENT, ScrollView.LayoutParams.MATCH_PARENT))
+        }
         root.addView(scrollView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.MATCH_PARENT))
         setContentView(root)
     }
@@ -153,8 +154,15 @@ class LoginActivity : AppCompatActivity() {
         if (isPassword) inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
     }
 
-    private fun marginTop(margin: Int) =
-        LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = margin }
+    /** Full card width, explicit -- an EditText's WRAP_CONTENT width isn't
+     * reliable across input types (a password field's masked-dot metrics
+     * can measure narrower than a plain text field's), so every field and
+     * the button below it get the same explicit MATCH_PARENT width. */
+    private fun fullWidthParams(marginTopPx: Int) =
+        LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = marginTopPx }
+
+    private fun centeredParams(marginTopPx: Int) =
+        LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = marginTopPx }
 
     private fun attemptCreate() {
         val username = usernameField.text.toString().trim()
