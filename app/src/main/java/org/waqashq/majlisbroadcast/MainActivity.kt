@@ -123,6 +123,25 @@ class MainActivity : AppCompatActivity() {
             setPadding(40, 64, 40, 40)
         }
 
+        // ---- Logo header -- same badge artwork as the launcher icon, per
+        // user request to reuse it inside the app (loading screen + here). ----
+        val logo = ImageView(this).apply {
+            setImageResource(R.mipmap.ic_launcher_foreground)
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            val size = (88 * resources.displayMetrics.density).toInt()
+            layoutParams = LinearLayout.LayoutParams(size, size).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+                bottomMargin = (20 * resources.displayMetrics.density).toInt()
+            }
+            clipToOutline = true
+            outlineProvider = object : android.view.ViewOutlineProvider() {
+                override fun getOutline(view: View, outline: android.graphics.Outline) {
+                    outline.setOval(0, 0, view.width, view.height)
+                }
+            }
+        }
+        scrollContent.addView(logo)
+
         // ---- Card ----
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL

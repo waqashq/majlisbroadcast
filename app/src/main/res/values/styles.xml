@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Splash screen theme: sets the window background before any layout
+         inflates, so the app opens straight into the dark studio background
+         behind the logo instead of a brief white/system flash. -->
+    <style name="Theme.Splash" parent="Theme.AppCompat.NoActionBar">
+        <item name="android:windowBackground">@color/splash_background</item>
+        <item name="colorPrimaryDark">@color/splash_background</item>
+    </style>
+</resources>

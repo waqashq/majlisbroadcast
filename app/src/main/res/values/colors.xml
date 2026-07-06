@@ -8,4 +8,8 @@
          badge's own dark green tone purely as a safe fallback for any
          edge/anti-aliasing pixels. -->
     <color name="ic_launcher_background">#04241A</color>
+
+    <!-- Splash screen background, matches UiTheme.STUDIO_BG, so there is
+         no color mismatch/flash between the splash and the Broadcast screen. -->
+    <color name="splash_background">#0B0D0E</color>
 </resources>
