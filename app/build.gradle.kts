@@ -52,8 +52,8 @@ android {
         applicationId = "org.waqashq.majlisbroadcast"
         minSdk = 26
         targetSdk = 34
-        versionCode = 18
-        versionName = "p7.8"
+        versionCode = 19
+        versionName = "p7.9"
 
         buildConfigField("String", "AZURACAST_HOST", "\"${secret("azuracast.host")}\"")
         buildConfigField("int", "AZURACAST_PORT", secret("azuracast.port", "0"))
@@ -65,7 +65,7 @@ android {
         // returning an empty array for unauthenticated requests; the
         // per-station endpoint (/api/nowplaying/{shortcode}) is reliable
         // regardless, so it's used instead whenever this is set.
-        buildConfigField("String", "AZURACAST_STATION_SHORTCODE", "\"${secret(\"azuracast.station_shortcode\")}\"")
+        buildConfigField("String", "AZURACAST_STATION_SHORTCODE", "\"${secret("azuracast.station_shortcode")}\"")
     }
 
     signingConfigs {
