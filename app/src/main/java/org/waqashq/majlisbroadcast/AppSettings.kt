@@ -30,6 +30,8 @@ object AppSettings {
     private const val KEY_PASSWORD = "server_password"
     private const val KEY_SAMPLE_RATE = "audio_sample_rate"
     private const val KEY_BIT_RATE = "audio_bit_rate"
+    private const val KEY_LOGIN_USERNAME = "app_login_username"
+    private const val KEY_LOGIN_PASSWORD = "app_login_password"
 
     const val DEFAULT_SAMPLE_RATE = 44_100
     const val DEFAULT_BIT_RATE_BPS = 64_000
@@ -87,6 +89,31 @@ object AppSettings {
     fun apiBaseUrl(context: Context): String = "https://" + host(context)
 
     fun isConfigured(context: Context): Boolean = host(context).isNotBlank() && port(context) != 0
+
+    // ================= App-lock login (Phase 8b) =================
+    // A purely local, on-device gate (not tied to AzuraCast auth at all) --
+    // its only job is to stop an accidental tap from going live, per the
+    // user's request. Stored the same way as the AzuraCast password
+    // (already Keystore-encrypted at rest), no separate hashing needed.
+
+    fun loginUsername(context: Context): String = prefs(context).getString(KEY_LOGIN_USERNAME, "") ?: ""
+    fun loginPassword(context: Context): String = prefs(context).getString(KEY_LOGIN_PASSWORD, "") ?: ""
+
+    /** False until the user has set up their own app-lock username/password. */
+    fun isLoginConfigured(context: Context): Boolean =
+        loginUsername(context).isNotBlank() && loginPassword(context).isNotBlank()
+
+    fun checkLogin(context: Context, username: String, password: String): Boolean =
+        isLoginConfigured(context) &&
+            username.trim() == loginUsername(context) &&
+            password == loginPassword(context)
+
+    fun saveLogin(context: Context, username: String, password: String) {
+        prefs(context).edit()
+            .putString(KEY_LOGIN_USERNAME, username.trim())
+            .putString(KEY_LOGIN_PASSWORD, password)
+            .apply()
+    }
 
     fun save(
         context: Context,

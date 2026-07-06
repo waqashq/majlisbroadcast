@@ -32,6 +32,25 @@
     <string name="server_validation_error">سرور ہوسٹ اور درست پورٹ درج کریں (1-65535)</string>
     <string name="server_live_edit_notice">تبدیلیاں اگلی بار لائیو ہونے پر لاگو ہوں گی</string>
 
+    <string name="login_title">لاگ ان</string>
+    <string name="login_create_title">ایپ لاک ترتیب دیں</string>
+    <string name="login_create_subtitle">غلطی سے براڈکاسٹ ہونے سے بچنے کے لیے صارف نام اور پاس ورڈ بنائیں۔</string>
+    <string name="login_subtitle">جاری رکھنے کے لیے اپنا صارف نام اور پاس ورڈ درج کریں۔</string>
+    <string name="login_username_hint">صارف نام</string>
+    <string name="login_password_hint">پاس ورڈ</string>
+    <string name="login_confirm_password_hint">پاس ورڈ کی تصدیق کریں</string>
+    <string name="btn_login">لاگ ان</string>
+    <string name="btn_create_login">لاگ ان بنائیں</string>
+    <string name="login_error_mismatch">پاس ورڈ مماثل نہیں ہیں</string>
+    <string name="login_error_incomplete">صارف نام اور پاس ورڈ درج کریں</string>
+    <string name="login_error_wrong">غلط صارف نام یا پاس ورڈ</string>
+
+    <string name="app_lock_section_title">ایپ لاک</string>
+    <string name="app_lock_section_subtitle">غلطی سے براڈکاسٹ سے بچنے کے لیے ہر بار ایپ کھولنے پر ضروری ہے۔</string>
+    <string name="btn_save_app_lock">ایپ لاک محفوظ کریں</string>
+    <string name="app_lock_saved_toast">ایپ لاک اپ ڈیٹ ہو گیا</string>
+    <string name="app_lock_reset_notice">اگر آپ یہ بھول جائیں تو صرف حل ایپ کا ڈیٹا صاف کرنا ہے، جس سے آپ کی سرور کی ترتیبات بھی مٹ جائیں گی۔</string>
+
     <string name="diagnostics_title">تشخیصی معلومات</string>
     <string name="diagnostics_line">دوبارہ رابطے: %1$d\nضائع شدہ فریمز: %2$d (%3$d مرتبہ)\nقطار: %4$d/%5$d فریمز\nبٹ ریٹ: %6$d kbps\nبفرنگ تاخیر (تخمینہ): ~%7$d ms\nبلوٹوتھ SCO مسترد: %8$d بار</string>
 

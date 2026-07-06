@@ -32,6 +32,25 @@
     <string name="server_validation_error">Enter a server host and a valid port (1-65535)</string>
     <string name="server_live_edit_notice">Changes take effect next time you go live</string>
 
+    <string name="login_title">Login</string>
+    <string name="login_create_title">Set Up App Lock</string>
+    <string name="login_create_subtitle">Create a username and password to protect against accidental broadcasts.</string>
+    <string name="login_subtitle">Enter your username and password to continue.</string>
+    <string name="login_username_hint">Username</string>
+    <string name="login_password_hint">Password</string>
+    <string name="login_confirm_password_hint">Confirm Password</string>
+    <string name="btn_login">Login</string>
+    <string name="btn_create_login">Create Login</string>
+    <string name="login_error_mismatch">Passwords don\'t match</string>
+    <string name="login_error_incomplete">Enter a username and password</string>
+    <string name="login_error_wrong">Incorrect username or password</string>
+
+    <string name="app_lock_section_title">App Lock</string>
+    <string name="app_lock_section_subtitle">Required every time the app is opened, to prevent an accidental broadcast.</string>
+    <string name="btn_save_app_lock">Save App Lock</string>
+    <string name="app_lock_saved_toast">App lock updated</string>
+    <string name="app_lock_reset_notice">If you forget this, the only recovery is clearing the app\'s storage, which also erases your server settings.</string>
+
     <string name="diagnostics_title">Diagnostics</string>
     <string name="diagnostics_line">Reconnects: %1$d\nDropped frames: %2$d (%3$d bursts)\nQueue: %4$d/%5$d frames\nBitrate: %6$d kbps\nBuffering latency (est.): ~%7$d ms\nBluetooth SCO refused: %8$d times</string>
 

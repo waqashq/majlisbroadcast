@@ -55,6 +55,10 @@ class SettingsActivity : AppCompatActivity() {
     private var selectedSampleRate = AppSettings.DEFAULT_SAMPLE_RATE
     private var selectedBitRateBps = AppSettings.DEFAULT_BIT_RATE_BPS
 
+    // Phase 8b: app-lock (login gate) credentials, changeable from here.
+    private lateinit var appLockUsernameField: EditText
+    private lateinit var appLockPasswordField: EditText
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         supportActionBar?.hide()
@@ -206,6 +210,39 @@ class SettingsActivity : AppCompatActivity() {
         }
         serverCard.addView(liveEditNotice, topMarginParams(12))
 
+        // ---- App Lock card (Phase 8b) ----
+        val appLockCard = card()
+        appLockCard.addView(cardTitle(getString(R.string.app_lock_section_title)), topMarginParams(0))
+        val appLockSubtitle = cardBody().apply {
+            text = getString(R.string.app_lock_section_subtitle)
+            textSize = 11f
+        }
+        appLockCard.addView(appLockSubtitle, topMarginParams(8))
+
+        appLockUsernameField = fieldInput(getString(R.string.login_username_hint)).apply {
+            setText(AppSettings.loginUsername(this@SettingsActivity))
+        }
+        appLockCard.addView(appLockUsernameField, topMarginParams(20))
+
+        appLockPasswordField = fieldInput(getString(R.string.login_password_hint)).apply {
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+            setText(AppSettings.loginPassword(this@SettingsActivity))
+        }
+        appLockCard.addView(appLockPasswordField, topMarginParams(16))
+
+        val saveAppLockButton = pillButton(getString(R.string.btn_save_app_lock))
+        saveAppLockButton.setOnClickListener { saveAppLock() }
+        appLockCard.addView(
+            saveAppLockButton,
+            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 24 }
+        )
+
+        val appLockResetNotice = cardBody().apply {
+            text = getString(R.string.app_lock_reset_notice)
+            textSize = 11f
+        }
+        appLockCard.addView(appLockResetNotice, topMarginParams(12))
+
         // ---- Diagnostics + battery card ----
         val diagCard = card()
         diagCard.addView(cardTitle(getString(R.string.diagnostics_title)), topMarginParams(0))
@@ -231,7 +268,7 @@ class SettingsActivity : AppCompatActivity() {
             text = getString(R.string.build_version, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE)
         }
 
-        listOf(languageCard, serverCard, diagCard, debugCard).forEach {
+        listOf(languageCard, serverCard, appLockCard, diagCard, debugCard).forEach {
             content.addView(
                 it,
                 LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
@@ -390,6 +427,17 @@ class SettingsActivity : AppCompatActivity() {
             bitRateBps = selectedBitRateBps
         )
         Toast.makeText(this, getString(R.string.server_saved_toast), Toast.LENGTH_SHORT).show()
+    }
+
+    private fun saveAppLock() {
+        val username = appLockUsernameField.text.toString().trim()
+        val password = appLockPasswordField.text.toString()
+        if (username.isBlank() || password.isBlank()) {
+            Toast.makeText(this, getString(R.string.login_error_incomplete), Toast.LENGTH_LONG).show()
+            return
+        }
+        AppSettings.saveLogin(this, username, password)
+        Toast.makeText(this, getString(R.string.app_lock_saved_toast), Toast.LENGTH_SHORT).show()
     }
 
     private fun highlightActiveLanguage(system: Button, english: Button, urdu: Button) {
