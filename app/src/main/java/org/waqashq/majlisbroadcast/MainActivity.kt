@@ -48,8 +48,6 @@ class MainActivity : AppCompatActivity() {
     private val prefBatteryExemptionAsked = "battery_exemption_asked"
     private val prefsName = "majlis_prefs"
 
-    private val configuredBitrateKbps = 64
-
     private lateinit var statusPill: TextView
     private lateinit var latencyIcon: ImageView
     private lateinit var latencyText: TextView
@@ -111,6 +109,20 @@ class MainActivity : AppCompatActivity() {
             uiHandler.post(livePoller)
         }
     }
+
+    override fun onResume() {
+        super.onResume()
+        // Refreshes the bitrate meter to whatever's currently saved in
+        // Settings -- but only while not live, so a bit rate changed
+        // mid-broadcast (which the Settings screen itself says only takes
+        // effect next time you go live) doesn't make the meter claim a
+        // number the actual running session isn't using.
+        if (!isLive) {
+            bitrateText.text = currentBitrateLabel()
+        }
+    }
+
+    private fun currentBitrateLabel(): String = getString(R.string.bitrate_format, AppSettings.bitRateBps(this) / 1000)
 
     private fun buildUi() {
         val root = LinearLayout(this).apply {
@@ -236,7 +248,7 @@ class MainActivity : AppCompatActivity() {
         bitrateText = TextView(this).apply {
             textSize = 12f
             setTextColor(UiTheme.STUDIO_TEXT_MUTED)
-            text = getString(R.string.bitrate_format, configuredBitrateKbps)
+            text = currentBitrateLabel()
         }
 
         meterRow.addView(micStack)
@@ -475,6 +487,11 @@ class MainActivity : AppCompatActivity() {
                 return
             }
             DebugLog.log("Go Live tapped")
+            // Snapshot now, not just at buildUi() time -- this is the
+            // exact value BroadcastService/BroadcastEngine will read a
+            // moment from now, so the meter reflects the actual running
+            // session even if Settings was changed since the app opened.
+            bitrateText.text = currentBitrateLabel()
             BroadcastService.start(this)
             isLive = true
             updateGoLiveButtonStyle()
