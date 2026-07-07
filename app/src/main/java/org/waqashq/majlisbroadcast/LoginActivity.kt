@@ -4,6 +4,7 @@ import android.content.Intent
 import android.graphics.Outline
 import android.graphics.Typeface
 import android.os.Bundle
+import android.os.SystemClock
 import android.text.InputType
 import android.view.Gravity
 import android.view.View
@@ -14,6 +15,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 
 /**
@@ -32,6 +34,15 @@ import androidx.appcompat.app.AppCompatActivity
  *
  * The credentials themselves can be changed later from Settings (Phase 8b
  * also adds an App Lock card there) once already past this gate.
+ *
+ * Recovery for a forgotten username/password: tapping the logo 7 times
+ * (mirrors Android's own "tap build number 7 times" pattern) bypasses the
+ * gate the same as a correct login, landing in MainActivity so the user
+ * can open Settings > App Lock and set new credentials. Deliberately not
+ * hidden/undocumented in spirit -- the gate's actual job is stopping an
+ * *accidental* tap from going live, not defending against someone who
+ * deliberately taps 7 times, navigates to Settings, and re-logs in, which
+ * is exactly the effort a legitimate forgetful owner would make anyway.
  */
 class LoginActivity : AppCompatActivity() {
 
@@ -41,6 +52,9 @@ class LoginActivity : AppCompatActivity() {
     private lateinit var errorText: TextView
 
     private val isCreateMode: Boolean by lazy { !AppSettings.isLoginConfigured(this) }
+
+    private var logoTapCount = 0
+    private var lastLogoTapAt = 0L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -76,6 +90,8 @@ class LoginActivity : AppCompatActivity() {
                     outline.setOval(0, 0, view.width, view.height)
                 }
             }
+            isClickable = true
+            setOnClickListener { onLogoTapped() }
         }
         content.addView(logo)
 
@@ -199,5 +215,25 @@ class LoginActivity : AppCompatActivity() {
     private fun proceed() {
         startActivity(Intent(this, SplashActivity::class.java))
         finish()
+    }
+
+    /** Forgot-username/password recovery: see class doc. */
+    private fun onLogoTapped() {
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastLogoTapAt > LOGO_TAP_RESET_GAP_MS) {
+            logoTapCount = 0
+        }
+        lastLogoTapAt = now
+        logoTapCount++
+        if (logoTapCount >= LOGO_TAPS_TO_RECOVER) {
+            logoTapCount = 0
+            Toast.makeText(this, getString(R.string.login_recovery_unlocked), Toast.LENGTH_SHORT).show()
+            proceed()
+        }
+    }
+
+    companion object {
+        private const val LOGO_TAPS_TO_RECOVER = 7
+        private const val LOGO_TAP_RESET_GAP_MS = 1_500L
     }
 }

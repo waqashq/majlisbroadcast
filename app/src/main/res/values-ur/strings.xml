@@ -44,6 +44,7 @@
     <string name="login_error_mismatch">پاس ورڈ مماثل نہیں ہیں</string>
     <string name="login_error_incomplete">صارف نام اور پاس ورڈ درج کریں</string>
     <string name="login_error_wrong">غلط صارف نام یا پاس ورڈ</string>
+    <string name="login_recovery_unlocked">ریکوری کھل گئی -- نیا صارف نام/پاس ورڈ سیٹ کرنے کے لیے سیٹنگز > ایپ لاک میں جائیں</string>
 
     <string name="app_lock_section_title">ایپ لاک</string>
     <string name="app_lock_section_subtitle">غلطی سے براڈکاسٹ سے بچنے کے لیے ہر بار ایپ کھولنے پر ضروری ہے۔</string>

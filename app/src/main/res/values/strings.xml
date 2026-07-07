@@ -44,6 +44,7 @@
     <string name="login_error_mismatch">Passwords don\'t match</string>
     <string name="login_error_incomplete">Enter a username and password</string>
     <string name="login_error_wrong">Incorrect username or password</string>
+    <string name="login_recovery_unlocked">Recovery unlocked -- go to Settings > App Lock to set a new username/password</string>
 
     <string name="app_lock_section_title">App Lock</string>
     <string name="app_lock_section_subtitle">Required every time the app is opened, to prevent an accidental broadcast.</string>
