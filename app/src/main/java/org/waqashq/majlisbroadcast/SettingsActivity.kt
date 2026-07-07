@@ -426,7 +426,11 @@ class SettingsActivity : AppCompatActivity() {
             sampleRate = selectedSampleRate,
             bitRateBps = selectedBitRateBps
         )
-        Toast.makeText(this, getString(R.string.server_saved_toast), Toast.LENGTH_SHORT).show()
+        SuccessOverlay.show(this, getString(R.string.dialog_settings_saved)) {
+            // Per request: redirect back to the main Broadcast screen after
+            // the confirmation, rather than staying on Settings.
+            finish()
+        }
     }
 
     private fun saveAppLock() {

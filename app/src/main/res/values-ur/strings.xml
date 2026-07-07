@@ -29,6 +29,9 @@
     <string name="server_bit_rate_label">بٹ ریٹ</string>
     <string name="btn_save_server">سرور کی ترتیبات محفوظ کریں</string>
     <string name="server_saved_toast">سرور کی ترتیبات محفوظ ہو گئیں</string>
+    <string name="dialog_settings_saved">ترتیبات کامیابی سے محفوظ ہو گئیں</string>
+    <string name="dialog_broadcast_started">براڈکاسٹ شروع ہو گیا</string>
+    <string name="dialog_broadcast_ended">براڈکاسٹ ختم ہو گیا</string>
     <string name="server_validation_error">سرور ہوسٹ اور درست پورٹ درج کریں (1-65535)</string>
     <string name="server_live_edit_notice">تبدیلیاں اگلی بار لائیو ہونے پر لاگو ہوں گی</string>
 

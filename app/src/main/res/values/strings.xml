@@ -29,6 +29,9 @@
     <string name="server_bit_rate_label">Bit Rate</string>
     <string name="btn_save_server">Save Server Settings</string>
     <string name="server_saved_toast">Server settings saved</string>
+    <string name="dialog_settings_saved">Settings Saved Successfully</string>
+    <string name="dialog_broadcast_started">Broadcast Started</string>
+    <string name="dialog_broadcast_ended">Broadcast Ended</string>
     <string name="server_validation_error">Enter a server host and a valid port (1-65535)</string>
     <string name="server_live_edit_notice">Changes take effect next time you go live</string>
 

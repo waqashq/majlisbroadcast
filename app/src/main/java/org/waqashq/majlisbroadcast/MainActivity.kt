@@ -481,6 +481,7 @@ class MainActivity : AppCompatActivity() {
             updateRecordButtonStyle()
             applyStatusStyle(BroadcastEngine.State.CONNECTING, callMuted = false, manualMuted = false)
             uiHandler.post(livePoller)
+            SuccessOverlay.show(this, getString(R.string.dialog_broadcast_started))
         } else {
             DebugLog.log("Stop tapped")
             BroadcastService.stop(this)
@@ -493,6 +494,7 @@ class MainActivity : AppCompatActivity() {
             listenerCountText.text = getString(R.string.listener_count_unavailable)
             waveform.reset()
             uiHandler.removeCallbacks(livePoller)
+            SuccessOverlay.show(this, getString(R.string.dialog_broadcast_ended))
         }
     }
 

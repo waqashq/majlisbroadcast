@@ -146,6 +146,16 @@ class BroadcastEngine(
         running = true
         queue.clear()
         DebugLog.log("Engine starting")
+        // Confirms exactly which Settings values this session is actually
+        // using (host/port hidden from the log deliberately -- username/
+        // password already aren't logged anywhere; this is diagnostic
+        // only, in response to a report that a changed bit rate didn't
+        // seem to take effect). If the app logs one value here but the
+        // AzuraCast dashboard/listener reports a different bitrate, the
+        // mismatch is on the server side (e.g. a mount/station audio
+        // processing setting that re-encodes the incoming stream),
+        // not this app.
+        DebugLog.log("Session config: mount='${mount.ifBlank { "/" }}', sampleRate=${sampleRate}Hz, bitRate=${bitRateBps / 1000}kbps")
         state = State.CONNECTING
 
         captureThread = Thread({ runCapture() }, "BroadcastEngine-capture").apply {
