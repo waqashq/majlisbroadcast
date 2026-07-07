@@ -62,12 +62,21 @@ class SplashActivity : AppCompatActivity() {
         }
         content.addView(logo)
 
+        // Green banner matching the logo's brand color, white contrasting
+        // text, centered -- the app's name/heading.
         val title = TextView(this).apply {
             text = getString(R.string.app_name)
-            setTextColor(UiTheme.STUDIO_TEXT_PRIMARY)
+            setTextColor(android.graphics.Color.WHITE)
             textSize = 20f
             typeface = Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
+            background = UiTheme.pillButtonBackground(UiTheme.PRIMARY_GREEN)
+            setPadding(
+                (40 * resources.displayMetrics.density).toInt(),
+                (18 * resources.displayMetrics.density).toInt(),
+                (40 * resources.displayMetrics.density).toInt(),
+                (18 * resources.displayMetrics.density).toInt()
+            )
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT

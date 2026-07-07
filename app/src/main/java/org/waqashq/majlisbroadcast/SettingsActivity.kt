@@ -197,7 +197,7 @@ class SettingsActivity : AppCompatActivity() {
         ) { showBitRatePicker() }
         serverCard.addView(bitRateRow, topMarginParams(16))
 
-        val saveServerButton = pillButton(getString(R.string.btn_save_server))
+        val saveServerButton = saveButton(getString(R.string.btn_save_server))
         saveServerButton.setOnClickListener { saveServerSettings() }
         serverCard.addView(
             saveServerButton,
@@ -230,7 +230,7 @@ class SettingsActivity : AppCompatActivity() {
         }
         appLockCard.addView(appLockPasswordField, topMarginParams(16))
 
-        val saveAppLockButton = pillButton(getString(R.string.btn_save_app_lock))
+        val saveAppLockButton = saveButton(getString(R.string.btn_save_app_lock))
         saveAppLockButton.setOnClickListener { saveAppLock() }
         appLockCard.addView(
             saveAppLockButton,
@@ -326,6 +326,20 @@ class SettingsActivity : AppCompatActivity() {
         setTypeface(typeface, Typeface.BOLD)
         setTextColor(UiTheme.STUDIO_TEXT_PRIMARY)
         background = UiTheme.outlinePillBackground(UiTheme.STUDIO_BORDER_TEAL)
+        setPadding(0, 24, 0, 24)
+    }
+
+    /** A solid-filled pill, distinct from the outline pillButton() above --
+     * used for Save actions specifically, per request, so they read as a
+     * clear "commit" action rather than blending in with outline buttons
+     * like View Debug Log. */
+    private fun saveButton(text: String): Button = Button(this).apply {
+        this.text = text
+        textSize = 14f
+        isAllCaps = false
+        setTypeface(typeface, Typeface.BOLD)
+        setTextColor(android.graphics.Color.WHITE)
+        background = UiTheme.pillButtonBackground(UiTheme.STUDIO_BORDER_TEAL)
         setPadding(0, 24, 0, 24)
     }
 

@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">MajlisBroadcast</string>
+    <string name="app_name">ملفوظات‏  اختر</string>
 
     <string name="status_mic_denied">مائیک کی اجازت نہیں ملی — نشریات ممکن نہیں۔</string>
 
@@ -82,7 +82,7 @@
     <string name="language_urdu">اردو</string>
 
     <string name="listener_count_label">سامعین: %1$d</string>
-    <string name="listener_count_unavailable">سامعین: — — —</string>
+    <string name="listener_count_unavailable">سامعین: — —</string>
 
     <string name="status_pill_offline">آف لائن</string>
     <string name="status_pill_connecting">رابطہ ہو رہا ہے</string>

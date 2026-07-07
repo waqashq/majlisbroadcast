@@ -48,6 +48,10 @@ class MainActivity : AppCompatActivity() {
     private val prefBatteryExemptionAsked = "battery_exemption_asked"
     private val prefsName = "majlis_prefs"
 
+    // Fixed Share Event content -- see onShareClicked().
+    private val SHARE_MESSAGE_UR = "مجلس  آن  لائن  سننے  کے  لیے:"
+    private val SHARE_URL = "https://waqashq.org/"
+
     private lateinit var statusPill: TextView
     private lateinit var latencyIcon: ImageView
     private lateinit var latencyText: TextView
@@ -153,6 +157,25 @@ class MainActivity : AppCompatActivity() {
             }
         }
         scrollContent.addView(logo)
+
+        // ---- App name banner -- green background matching the logo's
+        // brand color, white contrasting text, centered. ----
+        val nameBanner = TextView(this).apply {
+            text = getString(R.string.app_name)
+            textSize = 17f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
+            background = UiTheme.pillButtonBackground(UiTheme.PRIMARY_GREEN)
+            setPadding(36, 16, 36, 16)
+        }
+        scrollContent.addView(
+            nameBanner,
+            LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+                bottomMargin = (24 * resources.displayMetrics.density).toInt()
+            }
+        )
 
         // ---- Card ----
         val card = LinearLayout(this).apply {
@@ -295,16 +318,18 @@ class MainActivity : AppCompatActivity() {
             setTextColor(UiTheme.STUDIO_ON_AIR_GREEN)
             gravity = Gravity.CENTER
         }
+        // Solid fill (distinct from the outline style used elsewhere), per
+        // request -- dark text/icon for contrast against the bright green.
         val shareIcon = ImageView(this).apply {
             setImageResource(R.drawable.ic_share)
-            setColorFilter(UiTheme.STUDIO_ON_AIR_GREEN)
+            setColorFilter(UiTheme.STUDIO_BG)
             layoutParams = LinearLayout.LayoutParams(30, 30)
         }
         val shareLabel = TextView(this).apply {
             text = getString(R.string.btn_share_event)
             textSize = 15f
             setTypeface(typeface, Typeface.BOLD)
-            setTextColor(UiTheme.STUDIO_ON_AIR_GREEN)
+            setTextColor(UiTheme.STUDIO_BG)
             gravity = Gravity.CENTER
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
                 marginStart = 16
@@ -313,7 +338,7 @@ class MainActivity : AppCompatActivity() {
         shareButton = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
-            background = UiTheme.outlinePillBackground(UiTheme.STUDIO_ON_AIR_GREEN)
+            background = UiTheme.pillButtonBackground(UiTheme.STUDIO_ON_AIR_GREEN)
             setPadding(0, 22, 0, 22)
             isClickable = true
             isFocusable = true
@@ -498,7 +523,10 @@ class MainActivity : AppCompatActivity() {
             updateRecordButtonStyle()
             applyStatusStyle(BroadcastEngine.State.CONNECTING, callMuted = false, manualMuted = false)
             uiHandler.post(livePoller)
-            SuccessOverlay.show(this, getString(R.string.dialog_broadcast_started))
+            awaitStateAndShowDialog(
+                setOf(BroadcastEngine.State.LIVE),
+                getString(R.string.dialog_broadcast_started)
+            )
         } else {
             DebugLog.log("Stop tapped")
             BroadcastService.stop(this)
@@ -511,8 +539,41 @@ class MainActivity : AppCompatActivity() {
             listenerCountText.text = getString(R.string.listener_count_unavailable)
             waveform.reset()
             uiHandler.removeCallbacks(livePoller)
-            SuccessOverlay.show(this, getString(R.string.dialog_broadcast_ended))
+            awaitStateAndShowDialog(
+                setOf(BroadcastEngine.State.STOPPED, BroadcastEngine.State.IDLE),
+                getString(R.string.dialog_broadcast_ended)
+            )
         }
+    }
+
+    /**
+     * Watches BroadcastService.state (separately from the main livePoller,
+     * whose own scheduling is tied to isLive and stops right after Stop is
+     * tapped) until it actually reaches one of [targetStates], then shows
+     * the success modal -- per request, "Broadcast Started"/"Broadcast
+     * Ended" should reflect a confirmed connect/disconnect, not just the
+     * button tap. Gives up silently after [timeoutMs] (e.g. the connect
+     * attempt ends in ERROR instead of LIVE -- no dialog is correct there,
+     * the status pill already shows the error).
+     */
+    private fun awaitStateAndShowDialog(
+        targetStates: Set<BroadcastEngine.State>,
+        message: String,
+        timeoutMs: Long = 20_000L
+    ) {
+        val deadline = SystemClock.elapsedRealtime() + timeoutMs
+        val checkRunnable = object : Runnable {
+            override fun run() {
+                if (isFinishing || isDestroyed) return
+                val state = BroadcastService.state
+                if (state in targetStates) {
+                    SuccessOverlay.show(this@MainActivity, message)
+                } else if (SystemClock.elapsedRealtime() < deadline) {
+                    uiHandler.postDelayed(this, 250)
+                }
+            }
+        }
+        uiHandler.post(checkRunnable)
     }
 
     private fun onRecordClicked() {
@@ -538,20 +599,15 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun onShareClicked() {
-        // Prefer a precise public listen-page URL if the now-playing API
-        // ever supplies one; AzuraCast's current API doesn't expose one
-        // directly (verified against its own OpenAPI spec), so this falls
-        // back to the station's own web root, which for a single-station
-        // setup like this one is the station's public page.
-        val url = BroadcastService.publicPlayerUrl
-            ?: AppSettings.apiBaseUrl(this).takeIf { AppSettings.isConfigured(this) }
-        if (url.isNullOrBlank()) {
-            Toast.makeText(this, getString(R.string.share_event_unavailable), Toast.LENGTH_SHORT).show()
-            return
-        }
+        // Fixed message + the station's public-facing site -- deliberately
+        // not derived from AzuraCast's own API/host (that's the admin
+        // panel's address, not something to hand to listeners) and
+        // deliberately not localized to the app's own display language,
+        // per request: this is what a listener should see regardless of
+        // which language the broadcaster's own app UI is set to.
         val intent = Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
-            putExtra(Intent.EXTRA_TEXT, url)
+            putExtra(Intent.EXTRA_TEXT, "$SHARE_MESSAGE_UR\n$SHARE_URL")
         }
         startActivity(Intent.createChooser(intent, getString(R.string.share_event_chooser_title)))
     }

@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">MajlisBroadcast</string>
+    <string name="app_name">Malfoozat e Akhtar</string>
 
     <string name="status_mic_denied">Mic permission denied — can\'t broadcast.</string>
 
@@ -82,7 +82,7 @@
     <string name="language_urdu">اردو</string>
 
     <string name="listener_count_label">Listeners: %1$d</string>
-    <string name="listener_count_unavailable">Listeners: — — —</string>
+    <string name="listener_count_unavailable">Listeners: — —</string>
 
     <string name="status_pill_offline">OFFLINE</string>
     <string name="status_pill_connecting">CONNECTING</string>
