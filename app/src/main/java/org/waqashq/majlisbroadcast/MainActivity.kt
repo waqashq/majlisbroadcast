@@ -71,7 +71,12 @@ class MainActivity : AppCompatActivity() {
     private val livePoller = object : Runnable {
         override fun run() {
             pollLiveState()
-            if (isLive) uiHandler.postDelayed(this, 300)
+            // 150ms, not 300 -- matches BroadcastEngine's own mic-level
+            // report throttle (reportLevel() there caps at ~150ms), so the
+            // waveform picks up fresh data twice as often. Smaller, more
+            // frequent position jumps read as noticeably smoother without
+            // needing custom scroll interpolation (see WaveformView doc).
+            if (isLive) uiHandler.postDelayed(this, 150)
         }
     }
 
@@ -134,9 +139,23 @@ class MainActivity : AppCompatActivity() {
             setBackgroundColor(UiTheme.STUDIO_BG)
         }
 
+        // ---- Top header bar -- full width, fixed (not part of the
+        // scrollable content), green background matching the logo's brand
+        // color, white contrasting centered text. Sits directly below the
+        // system status bar. ----
+        val header = TextView(this).apply {
+            text = getString(R.string.app_name)
+            textSize = 18f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
+            setBackgroundColor(UiTheme.PRIMARY_GREEN)
+            setPadding(24, 32, 24, 24)
+        }
+
         val scrollContent = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(40, 64, 40, 40)
+            setPadding(40, 40, 40, 40)
         }
 
         // ---- Logo header -- same badge artwork as the launcher icon, per
@@ -157,25 +176,6 @@ class MainActivity : AppCompatActivity() {
             }
         }
         scrollContent.addView(logo)
-
-        // ---- App name banner -- green background matching the logo's
-        // brand color, white contrasting text, centered. ----
-        val nameBanner = TextView(this).apply {
-            text = getString(R.string.app_name)
-            textSize = 17f
-            setTypeface(typeface, Typeface.BOLD)
-            setTextColor(Color.WHITE)
-            gravity = Gravity.CENTER
-            background = UiTheme.pillButtonBackground(UiTheme.PRIMARY_GREEN)
-            setPadding(36, 16, 36, 16)
-        }
-        scrollContent.addView(
-            nameBanner,
-            LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-                gravity = Gravity.CENTER_HORIZONTAL
-                bottomMargin = (24 * resources.displayMetrics.density).toInt()
-            }
-        )
 
         // ---- Card ----
         val card = LinearLayout(this).apply {
@@ -369,6 +369,7 @@ class MainActivity : AppCompatActivity() {
         nav.addView(navBroadcast, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         nav.addView(navSettings, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
 
+        root.addView(header, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         root.addView(scrollView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         root.addView(nav, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
 

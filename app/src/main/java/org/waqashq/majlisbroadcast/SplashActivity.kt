@@ -1,6 +1,7 @@
 package org.waqashq.majlisbroadcast
 
 import android.content.Intent
+import android.graphics.Color
 import android.graphics.Outline
 import android.graphics.Typeface
 import android.os.Bundle
@@ -25,6 +26,11 @@ import androidx.appcompat.app.AppCompatActivity
  * android:theme="@style/Theme.Splash" (set in the manifest) paints the
  * window background before this layout inflates, so there's no white/system
  * flash ahead of the dark background.
+ *
+ * Layout: a full-width green header bar (app name, same brand green as the
+ * logo and MainActivity's own header) pinned at the top, with the logo
+ * centered in the remaining space below -- replaces an earlier floating
+ * "pill badge" title that didn't read well on its own.
  */
 class SplashActivity : AppCompatActivity() {
 
@@ -39,20 +45,28 @@ class SplashActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val root = FrameLayout(this).apply {
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
             setBackgroundColor(UiTheme.STUDIO_BG)
         }
 
-        val content = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
+        val header = TextView(this).apply {
+            text = getString(R.string.app_name)
+            textSize = 18f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
+            setBackgroundColor(UiTheme.PRIMARY_GREEN)
+            setPadding(24, 32, 24, 24)
         }
+        root.addView(header, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+
+        val logoContainer = FrameLayout(this)
 
         val logoSize = (140 * resources.displayMetrics.density).toInt()
         val logo = ImageView(this).apply {
             setImageResource(R.mipmap.ic_launcher_foreground)
             scaleType = ImageView.ScaleType.CENTER_CROP
-            layoutParams = LinearLayout.LayoutParams(logoSize, logoSize)
             clipToOutline = true
             outlineProvider = object : ViewOutlineProvider() {
                 override fun getOutline(view: View, outline: Outline) {
@@ -60,34 +74,12 @@ class SplashActivity : AppCompatActivity() {
                 }
             }
         }
-        content.addView(logo)
-
-        // Green banner matching the logo's brand color, white contrasting
-        // text, centered -- the app's name/heading.
-        val title = TextView(this).apply {
-            text = getString(R.string.app_name)
-            setTextColor(android.graphics.Color.WHITE)
-            textSize = 20f
-            typeface = Typeface.DEFAULT_BOLD
-            gravity = Gravity.CENTER
-            background = UiTheme.pillButtonBackground(UiTheme.PRIMARY_GREEN)
-            setPadding(
-                (40 * resources.displayMetrics.density).toInt(),
-                (18 * resources.displayMetrics.density).toInt(),
-                (40 * resources.displayMetrics.density).toInt(),
-                (18 * resources.displayMetrics.density).toInt()
-            )
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { topMargin = (24 * resources.displayMetrics.density).toInt() }
-        }
-        content.addView(title)
-
-        root.addView(
-            content,
-            FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER)
+        logoContainer.addView(
+            logo,
+            FrameLayout.LayoutParams(logoSize, logoSize, Gravity.CENTER)
         )
+
+        root.addView(logoContainer, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         setContentView(root)
 
         handler.postDelayed(goToMain, SPLASH_DELAY_MS)

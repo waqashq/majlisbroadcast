@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.os.PowerManager
 import android.text.InputType
 import android.view.Gravity
+import android.view.View
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -354,6 +355,13 @@ class SettingsActivity : AppCompatActivity() {
         background = UiTheme.outlinePillBackground(UiTheme.STUDIO_TEXT_MUTED, strokeWidthPx = 2)
         setPadding(28, 20, 28, 20)
         setSingleLine(true)
+        // Password EditTexts (used here for the server password and the
+        // app-lock password fields) have a known Android quirk of ignoring
+        // the surrounding layout's RTL direction and defaulting to LTR
+        // regardless of locale -- explicit here so Urdu renders
+        // right-aligned like every other field.
+        textDirection = View.TEXT_DIRECTION_LOCALE
+        textAlignment = View.TEXT_ALIGNMENT_VIEW_START
     }
 
     /** A tappable "current value ›" row (Sample Rate / Bit Rate) that opens a picker dialog. */

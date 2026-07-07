@@ -167,6 +167,12 @@ class LoginActivity : AppCompatActivity() {
         background = UiTheme.outlinePillBackground(UiTheme.STUDIO_TEXT_MUTED, strokeWidthPx = 2)
         setPadding(28, 22, 28, 22)
         setSingleLine(true)
+        // Password EditTexts have a known Android quirk of ignoring the
+        // surrounding layout's RTL direction and defaulting to LTR text
+        // entry/alignment regardless of locale -- explicit here so Urdu
+        // renders right-aligned like every other field.
+        textDirection = View.TEXT_DIRECTION_LOCALE
+        textAlignment = View.TEXT_ALIGNMENT_VIEW_START
         if (isPassword) inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
     }
 
