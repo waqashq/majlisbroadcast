@@ -103,6 +103,12 @@ class MainActivity : AppCompatActivity() {
         buildUi()
         DebugLog.log("App opened")
 
+        // Phase 8c: sweep any recordings left behind in the old app-private
+        // location (from before that storage bug was fixed) into the new
+        // public Music folder, so they become visible without the user
+        // having to do anything. Cheap no-op once nothing's left to move.
+        migrateOldRecordingsIfAny()
+
         // First-run permission chain fires immediately on open, not just
         // when Go Live is tapped (section 7: "First-run: request...").
         proceedWithFirstRunChecks()
@@ -575,6 +581,27 @@ class MainActivity : AppCompatActivity() {
             }
         }
         uiHandler.post(checkRunnable)
+    }
+
+    /**
+     * Phase 8c one-time sweep: moves any recordings still sitting in the old
+     * app-private folder into the new public Music/Malfoozat e Akhtar folder.
+     * Runs off the main thread (file I/O); shows a toast only if it actually
+     * found something to move, so this stays invisible on every normal launch.
+     */
+    private fun migrateOldRecordingsIfAny() {
+        Thread {
+            val result = RecordingStorage.migrateOldRecordings(applicationContext)
+            if (result.moved > 0) {
+                uiHandler.post {
+                    Toast.makeText(
+                        this,
+                        getString(R.string.recordings_migrated_toast, result.moved),
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        }.start()
     }
 
     private fun onRecordClicked() {

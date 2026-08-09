@@ -244,6 +244,21 @@ class SettingsActivity : AppCompatActivity() {
         }
         appLockCard.addView(appLockResetNotice, topMarginParams(12))
 
+        // ---- Old recordings migration card (Phase 8c) ----
+        val recordingsCard = card()
+        recordingsCard.addView(cardTitle(getString(R.string.recordings_migrate_section_title)), topMarginParams(0))
+        val recordingsSubtitle = cardBody().apply {
+            text = getString(R.string.recordings_migrate_section_subtitle)
+            textSize = 11f
+        }
+        recordingsCard.addView(recordingsSubtitle, topMarginParams(8))
+        val moveRecordingsButton = pillButton(getString(R.string.btn_move_old_recordings))
+        moveRecordingsButton.setOnClickListener { moveOldRecordings(moveRecordingsButton) }
+        recordingsCard.addView(
+            moveRecordingsButton,
+            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 20 }
+        )
+
         // ---- Diagnostics + battery card ----
         val diagCard = card()
         diagCard.addView(cardTitle(getString(R.string.diagnostics_title)), topMarginParams(0))
@@ -269,7 +284,7 @@ class SettingsActivity : AppCompatActivity() {
             text = getString(R.string.build_version, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE)
         }
 
-        listOf(languageCard, serverCard, appLockCard, diagCard, debugCard).forEach {
+        listOf(languageCard, serverCard, appLockCard, recordingsCard, diagCard, debugCard).forEach {
             content.addView(
                 it,
                 LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
@@ -464,6 +479,28 @@ class SettingsActivity : AppCompatActivity() {
         }
         AppSettings.saveLogin(this, username, password)
         Toast.makeText(this, getString(R.string.app_lock_saved_toast), Toast.LENGTH_SHORT).show()
+    }
+
+    /**
+     * Phase 8c: manual re-trigger of the same migration MainActivity runs
+     * automatically on launch -- lets the user confirm on demand that any
+     * recordings left in the old hidden folder have been moved, with a
+     * result message that says exactly how many were found.
+     */
+    private fun moveOldRecordings(button: Button) {
+        button.isEnabled = false
+        Thread {
+            val result = RecordingStorage.migrateOldRecordings(applicationContext)
+            runOnUiThread {
+                button.isEnabled = true
+                val message = if (result.moved == 0 && result.failed == 0) {
+                    getString(R.string.recordings_migrate_none_found)
+                } else {
+                    getString(R.string.recordings_migrate_result, result.moved)
+                }
+                Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+            }
+        }.start()
     }
 
     private fun highlightActiveLanguage(system: Button, english: Button, urdu: Button) {

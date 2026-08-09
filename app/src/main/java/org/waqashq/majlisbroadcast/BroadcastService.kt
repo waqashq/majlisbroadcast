@@ -5,10 +5,8 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
-import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.media.AudioAttributes
 import android.media.AudioFocusRequest
@@ -19,18 +17,12 @@ import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import android.net.Uri
 import android.net.wifi.WifiManager
-import android.os.Build
-import android.os.Environment
 import android.os.IBinder
 import android.os.PowerManager
 import android.os.SystemClock
-import android.provider.MediaStore
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
-import androidx.core.content.ContextCompat
 import java.io.File
-import java.io.FileOutputStream
-import java.io.OutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -238,9 +230,6 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
         stopSelf()
     }
 
-    /** Publicly-visible subfolder name used for both the MediaStore and legacy recording paths. */
-    private val recordingSubfolder = "Malfoozat e Akhtar"
-
     /** MediaStore Uri of the recording currently in progress (Android 10+ only), for finalizing on stop. */
     private var recordingUri: Uri? = null
 
@@ -250,71 +239,23 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
      * Phase 8c fix: recordings used to be written to app-specific external storage
      * (getExternalFilesDir), which Android 11+ hides from the Files app and every other
      * file browser -- that's why finished recordings were "nowhere to be found". Recordings
-     * are now saved to the public Music/Malfoozat e Akhtar folder (via MediaStore on
-     * Android 10+, or a direct public-directory file on very old Android), so they show up
-     * in Files, in Music apps, and are pickable from any file picker.
+     * are now saved to the public Music/Malfoozat e Akhtar folder via RecordingStorage
+     * (MediaStore on Android 10+, a direct public-directory file on very old Android), so
+     * they show up in Files, in Music apps, and are pickable from any file picker.
      */
     private fun beginLocalRecording() {
         val e = engine ?: return
         if (isRecording) return
         val name = "majlis_" + SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-        val out: OutputStream? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            openMediaStoreRecordingStream(name)
-        } else {
-            openLegacyRecordingStream(name)
-        }
-        if (out != null && e.startLocalRecording(out)) {
+        val target = RecordingStorage.open(this, name)
+        if (target != null && e.startLocalRecording(target.out)) {
             isRecording = true
             lastRecordingFileName = "$name.aac"
-            lastRecordingLocation = "Music/$recordingSubfolder"
+            lastRecordingLocation = "Music/${RecordingStorage.SUBFOLDER}"
+            recordingUri = target.uri
         } else {
             recordingUri = null
             DebugLog.log("Local recording could not be started (storage unavailable)")
-        }
-    }
-
-    /** Android 10+ (API 29+): insert a new pending entry into the shared Music collection. */
-    private fun openMediaStoreRecordingStream(name: String): OutputStream? {
-        return try {
-            val values = ContentValues().apply {
-                put(MediaStore.Audio.Media.DISPLAY_NAME, "$name.aac")
-                put(MediaStore.Audio.Media.MIME_TYPE, "audio/aac")
-                put(MediaStore.Audio.Media.RELATIVE_PATH, Environment.DIRECTORY_MUSIC + "/" + recordingSubfolder)
-                put(MediaStore.Audio.Media.IS_PENDING, 1)
-            }
-            val uri = contentResolver.insert(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, values)
-            if (uri == null) {
-                DebugLog.log("Recording: MediaStore insert returned null Uri")
-                return null
-            }
-            recordingUri = uri
-            contentResolver.openOutputStream(uri)
-        } catch (t: Throwable) {
-            DebugLog.log("Recording: MediaStore insert failed: ${t.javaClass.simpleName}: ${t.message}")
-            null
-        }
-    }
-
-    /** Pre-Android-10 fallback: write directly into the public Music directory (needs WRITE_EXTERNAL_STORAGE). */
-    private fun openLegacyRecordingStream(name: String): OutputStream? {
-        recordingUri = null
-        val granted = ContextCompat.checkSelfPermission(
-            this,
-            android.Manifest.permission.WRITE_EXTERNAL_STORAGE
-        ) == PackageManager.PERMISSION_GRANTED
-        if (!granted) {
-            DebugLog.log("Recording: WRITE_EXTERNAL_STORAGE not granted on this Android version")
-            return null
-        }
-        return try {
-            @Suppress("DEPRECATION")
-            val musicDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC)
-            val dir = File(musicDir, recordingSubfolder)
-            dir.mkdirs()
-            FileOutputStream(File(dir, "$name.aac"))
-        } catch (t: Throwable) {
-            DebugLog.log("Recording: legacy file open failed: ${t.javaClass.simpleName}: ${t.message}")
-            null
         }
     }
 
@@ -322,14 +263,7 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
         if (!isRecording) return
         engine?.stopLocalRecording()
         isRecording = false
-        recordingUri?.let { uri ->
-            try {
-                val values = ContentValues().apply { put(MediaStore.Audio.Media.IS_PENDING, 0) }
-                contentResolver.update(uri, values, null, null)
-            } catch (t: Throwable) {
-                DebugLog.log("Recording: MediaStore finalize failed: ${t.javaClass.simpleName}: ${t.message}")
-            }
-        }
+        RecordingStorage.finalize(this, recordingUri)
         recordingUri = null
     }
 
