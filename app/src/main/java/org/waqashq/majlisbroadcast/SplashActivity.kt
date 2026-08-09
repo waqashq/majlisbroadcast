@@ -37,7 +37,11 @@ class SplashActivity : AppCompatActivity() {
     private val handler = Handler(Looper.getMainLooper())
     private val goToMain = Runnable {
         if (!isFinishing) {
-            startActivity(Intent(this, MainActivity::class.java))
+            val target = Intent(this, MainActivity::class.java)
+            if (intent.getBooleanExtra(MainActivity.EXTRA_AUTO_GO_LIVE, false)) {
+                target.putExtra(MainActivity.EXTRA_AUTO_GO_LIVE, true)
+            }
+            startActivity(target)
             finish()
         }
     }

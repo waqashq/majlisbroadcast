@@ -32,6 +32,8 @@ object AppSettings {
     private const val KEY_BIT_RATE = "audio_bit_rate"
     private const val KEY_LOGIN_USERNAME = "app_login_username"
     private const val KEY_LOGIN_PASSWORD = "app_login_password"
+    private const val KEY_BASS_LEVEL = "audio_bass_level"
+    private const val KEY_ECHO_LEVEL = "audio_echo_level"
 
     const val DEFAULT_SAMPLE_RATE = 44_100
     const val DEFAULT_BIT_RATE_BPS = 64_000
@@ -84,6 +86,25 @@ object AppSettings {
     fun password(context: Context): String = prefs(context).getString(KEY_PASSWORD, "") ?: ""
     fun sampleRate(context: Context): Int = prefs(context).getInt(KEY_SAMPLE_RATE, DEFAULT_SAMPLE_RATE)
     fun bitRateBps(context: Context): Int = prefs(context).getInt(KEY_BIT_RATE, DEFAULT_BIT_RATE_BPS)
+
+    /**
+     * Phase 9: optional voice-tone effects for the live broadcast, both
+     * 0-100 and both off (0) by default -- 0 is an exact identity
+     * pass-through in BroadcastEngine, so an untouched install behaves
+     * exactly as before. Remembered across sessions like the other audio
+     * settings, but NOT tied to isConfigured()/seeding since they're purely
+     * cosmetic and safe to default to off.
+     */
+    fun bassLevel(context: Context): Int = prefs(context).getInt(KEY_BASS_LEVEL, 0).coerceIn(0, 100)
+    fun echoLevel(context: Context): Int = prefs(context).getInt(KEY_ECHO_LEVEL, 0).coerceIn(0, 100)
+
+    fun saveBassLevel(context: Context, level: Int) {
+        prefs(context).edit().putInt(KEY_BASS_LEVEL, level.coerceIn(0, 100)).apply()
+    }
+
+    fun saveEchoLevel(context: Context, level: Int) {
+        prefs(context).edit().putInt(KEY_ECHO_LEVEL, level.coerceIn(0, 100)).apply()
+    }
 
     /** The web-panel base URL for the now-playing API, derived from the current host (Phase 7 behavior, preserved). */
     fun apiBaseUrl(context: Context): String = "https://" + host(context)

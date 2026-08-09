@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Phase 9: static "Go Live" home-screen shortcut (long-press the app
+     icon). Routes through LoginActivity like any other cold start (the
+     login gate is never bypassed); the extra just tells MainActivity to
+     auto-tap Go Live once you've landed there, saving a step once you're
+     already through login. -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="go_live"
+        android:enabled="true"
+        android:icon="@drawable/ic_radio"
+        android:shortcutShortLabel="@string/shortcut_go_live_short"
+        android:shortcutLongLabel="@string/shortcut_go_live_long">
+        <intent
+            android:action="android.intent.action.MAIN"
+            android:targetPackage="org.waqashq.majlisbroadcast"
+            android:targetClass="org.waqashq.majlisbroadcast.LoginActivity">
+            <extra
+                android:name="org.waqashq.majlisbroadcast.extra.AUTO_GO_LIVE"
+                android:value="true" />
+        </intent>
+    </shortcut>
+</shortcuts>

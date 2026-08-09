@@ -49,12 +49,20 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
         private const val ACTION_STOP_RECORDING = "org.waqashq.majlisbroadcast.action.STOP_RECORDING"
         private const val ACTION_MUTE_MIC = "org.waqashq.majlisbroadcast.action.MUTE_MIC"
         private const val ACTION_UNMUTE_MIC = "org.waqashq.majlisbroadcast.action.UNMUTE_MIC"
+        private const val ACTION_SET_SELF_MONITOR = "org.waqashq.majlisbroadcast.action.SET_SELF_MONITOR"
+        private const val ACTION_SET_BASS_LEVEL = "org.waqashq.majlisbroadcast.action.SET_BASS_LEVEL"
+        private const val ACTION_SET_ECHO_LEVEL = "org.waqashq.majlisbroadcast.action.SET_ECHO_LEVEL"
+        private const val EXTRA_ENABLED = "enabled"
+        private const val EXTRA_LEVEL = "level"
 
         // Phase 7: how often to poll AzuraCast's now-playing API while
         // live. This is a cosmetic nicety, not part of the streaming
         // pipeline -- 30s is plenty fresh for a listener count display and
         // keeps it from being a meaningful battery/data cost.
         private const val LISTENER_POLL_INTERVAL_MS = 30_000L
+
+        /** Phase 9: cadence for the lighter-weight bytes-uploaded mirror while live. */
+        private const val STATS_TICK_MS = 2_000L
 
         @Volatile var state: BroadcastEngine.State = BroadcastEngine.State.IDLE
             private set
@@ -82,6 +90,8 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
         /** SystemClock.elapsedRealtime() when Go Live was tapped, or 0 if never started this session. */
         @Volatile var sessionStartRealtime: Long = 0
             private set
+        /** System.currentTimeMillis() companion to sessionStartRealtime, for a real date in the history log. */
+        @Volatile private var sessionStartWallClock: Long = 0
         /** Current listener count from AzuraCast's now-playing API, or null if unknown/unavailable (Phase 7). */
         @Volatile var listenerCount: Int? = null
             private set
@@ -100,6 +110,15 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
          * app-private storage that's invisible in normal file browsing.
          */
         @Volatile var lastRecordingLocation: String? = null
+            private set
+        /** Highest listener count seen this session, for the session-history log (Phase 9). */
+        @Volatile var peakListenerCount: Int = 0
+            private set
+        /** Cumulative bytes uploaded this session, mirrored from the engine every poll tick (Phase 9). */
+        @Volatile var bytesUploadedTotal: Long = 0
+            private set
+        /** Whether self-monitor playback (hear your own mic) is currently on (Phase 9, off by default each session). */
+        @Volatile var selfMonitorEnabled: Boolean = false
             private set
 
         fun start(context: Context) {
@@ -126,6 +145,31 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
         fun setMicMuted(context: Context, muted: Boolean) {
             val intent = Intent(context, BroadcastService::class.java).apply {
                 action = if (muted) ACTION_MUTE_MIC else ACTION_UNMUTE_MIC
+            }
+            context.startService(intent)
+        }
+
+        /** No-op if not currently live -- there's no engine to monitor when idle. */
+        fun setSelfMonitor(context: Context, enabled: Boolean) {
+            val intent = Intent(context, BroadcastService::class.java).apply {
+                action = ACTION_SET_SELF_MONITOR
+                putExtra(EXTRA_ENABLED, enabled)
+            }
+            context.startService(intent)
+        }
+
+        fun setBassLevel(context: Context, level: Int) {
+            val intent = Intent(context, BroadcastService::class.java).apply {
+                action = ACTION_SET_BASS_LEVEL
+                putExtra(EXTRA_LEVEL, level)
+            }
+            context.startService(intent)
+        }
+
+        fun setEchoLevel(context: Context, level: Int) {
+            val intent = Intent(context, BroadcastService::class.java).apply {
+                action = ACTION_SET_ECHO_LEVEL
+                putExtra(EXTRA_LEVEL, level)
             }
             context.startService(intent)
         }
@@ -178,6 +222,24 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
             engine?.setManuallyMuted(false)
             return START_NOT_STICKY
         }
+        if (intent?.action == ACTION_SET_SELF_MONITOR) {
+            val enabled = intent.getBooleanExtra(EXTRA_ENABLED, false)
+            engine?.setSelfMonitor(enabled)
+            selfMonitorEnabled = enabled
+            return START_NOT_STICKY
+        }
+        if (intent?.action == ACTION_SET_BASS_LEVEL) {
+            val level = intent.getIntExtra(EXTRA_LEVEL, 0)
+            engine?.setBassLevel(level)
+            AppSettings.saveBassLevel(this, level)
+            return START_NOT_STICKY
+        }
+        if (intent?.action == ACTION_SET_ECHO_LEVEL) {
+            val level = intent.getIntExtra(EXTRA_LEVEL, 0)
+            engine?.setEchoLevel(level)
+            AppSettings.saveEchoLevel(this, level)
+            return START_NOT_STICKY
+        }
 
         if (engine == null) {
             // Must be called within seconds of startForegroundService() --
@@ -192,6 +254,11 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
             val am = getSystemService(AUDIO_SERVICE) as AudioManager
             audioManager = am
 
+            peakListenerCount = 0
+            bytesUploadedTotal = 0
+            selfMonitorEnabled = false
+            sessionStartWallClock = System.currentTimeMillis()
+
             engine = BroadcastEngine(
                 AppSettings.host(this),
                 AppSettings.port(this),
@@ -200,6 +267,8 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
                 AppSettings.mount(this),
                 AppSettings.sampleRate(this),
                 AppSettings.bitRateBps(this),
+                AppSettings.bassLevel(this),
+                AppSettings.echoLevel(this),
                 am,
                 this
             ).also { it.start() }
@@ -223,11 +292,35 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
         abandonAudioFocus()
         releaseLocks()
         stopListenerPolling()
+        recordSessionHistoryIfMeaningful()
         isRecording = false
         manuallyMuted = false
+        selfMonitorEnabled = false
         state = BroadcastEngine.State.STOPPED
         sessionStartRealtime = 0
         stopSelf()
+    }
+
+    /**
+     * Phase 9: logs this session to SessionHistory once it's actually
+     * ending, using the wall-clock start time paired with
+     * sessionStartRealtime for an accurate elapsed duration. Skips
+     * sessions under 3s -- almost certainly an accidental tap, not a real
+     * majlis, and not worth cluttering the history screen with.
+     */
+    private fun recordSessionHistoryIfMeaningful() {
+        if (sessionStartRealtime == 0L) return
+        val durationMs = SystemClock.elapsedRealtime() - sessionStartRealtime
+        if (durationMs < 3_000L) return
+        SessionHistory.record(
+            this,
+            SessionHistory.Entry(
+                startedAtMs = sessionStartWallClock,
+                durationMs = durationMs,
+                peakListeners = peakListenerCount,
+                bytesUploaded = bytesUploadedTotal
+            )
+        )
     }
 
     /** MediaStore Uri of the recording currently in progress (Android 10+ only), for finalizing on stop. */
@@ -275,8 +368,10 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
         abandonAudioFocus()
         releaseLocks()
         stopListenerPolling()
+        recordSessionHistoryIfMeaningful()
         isRecording = false
         manuallyMuted = false
+        selfMonitorEnabled = false
         sessionStartRealtime = 0
         super.onDestroy()
     }
@@ -433,27 +528,38 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
 
     /**
      * Polls AzuraCast's now-playing API every LISTENER_POLL_INTERVAL_MS
-     * while live. Runs on its own plain thread rather than the writer/
-     * capture threads -- this must never share a thread with, block, or
-     * otherwise affect the actual streaming pipeline (section 0: "touches
-     * nothing in the streaming pipeline"). Any fetch failure just leaves
-     * listenerCount as whatever it last was (or null); never surfaced as
-     * an error to the broadcaster.
+     * while live, and (Phase 9) also mirrors the engine's cumulative
+     * bytes-uploaded counter and tracks the session's peak listener count
+     * on a much shorter STATS_TICK_MS cadence so the Broadcast screen's
+     * data-used readout stays reasonably live. Runs on its own plain
+     * thread rather than the writer/capture threads -- this must never
+     * share a thread with, block, or otherwise affect the actual streaming
+     * pipeline (section 0: "touches nothing in the streaming pipeline").
+     * Any fetch failure just leaves listenerCount as whatever it last was
+     * (or null); never surfaced as an error to the broadcaster.
      */
     private fun startListenerPolling() {
         listenerPolling = true
         listenerPollThread = Thread({
+            var msSincePoll = LISTENER_POLL_INTERVAL_MS // fetch immediately on the first tick
             while (listenerPolling) {
                 if (state == BroadcastEngine.State.LIVE) {
-                    val info = ListenerCountFetcher.fetch(
-                        AppSettings.apiBaseUrl(this@BroadcastService),
-                        BuildConfig.AZURACAST_STATION_SHORTCODE.takeIf { it.isNotBlank() }
-                    )
-                    listenerCount = info?.listenerCount
-                    if (info?.publicPlayerUrl != null) publicPlayerUrl = info.publicPlayerUrl
+                    bytesUploadedTotal = engine?.bytesUploaded() ?: bytesUploadedTotal
+                    if (msSincePoll >= LISTENER_POLL_INTERVAL_MS) {
+                        msSincePoll = 0
+                        val info = ListenerCountFetcher.fetch(
+                            AppSettings.apiBaseUrl(this@BroadcastService),
+                            BuildConfig.AZURACAST_STATION_SHORTCODE.takeIf { it.isNotBlank() }
+                        )
+                        listenerCount = info?.listenerCount
+                        if (info?.publicPlayerUrl != null) publicPlayerUrl = info.publicPlayerUrl
+                        val count = info?.listenerCount
+                        if (count != null && count > peakListenerCount) peakListenerCount = count
+                    }
                 }
                 try {
-                    Thread.sleep(LISTENER_POLL_INTERVAL_MS)
+                    Thread.sleep(STATS_TICK_MS)
+                    msSincePoll += STATS_TICK_MS
                 } catch (_: InterruptedException) {
                     break
                 }

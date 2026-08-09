@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Phase 9: simple clock glyph for the History nav tab (circle outline
+     plus two hands), hand-coded like the other icons in this set rather
+     than reproducing a Material icon's exact path data. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:strokeColor="#FF000000"
+        android:strokeWidth="1.6"
+        android:fillColor="#00000000"
+        android:pathData="M12,21 a9,9 0 1 0 -0.01,0 z"/>
+    <path
+        android:strokeColor="#FF000000"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M12,7 v5.5 l4,2.5"/>
+</vector>

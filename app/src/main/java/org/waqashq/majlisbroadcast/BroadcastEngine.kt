@@ -4,6 +4,7 @@ import android.media.AudioDeviceInfo
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioRecord
+import android.media.AudioTrack
 import android.media.MediaCodec
 import android.media.MediaCodecInfo
 import android.media.MediaFormat
@@ -32,6 +33,8 @@ class BroadcastEngine(
     private val mount: String,
     private val sampleRate: Int,
     private val bitRateBps: Int,
+    initialBassLevel: Int,
+    initialEchoLevel: Int,
     private val audioManager: AudioManager,
     private val listener: Listener
 ) {
@@ -96,6 +99,16 @@ class BroadcastEngine(
         // below -- less gain means fewer, smaller clamp events. Still
         // clamped to avoid unbounded digital clipping on loud peaks.
         private const val GAIN_FACTOR = 3.0f
+
+        // Phase 9: fixed slap-delay time for the optional Echo effect --
+        // short enough to read as an intentional room echo rather than a
+        // confusing double-voice, at any echo intensity the knob allows.
+        private const val ECHO_DELAY_MS = 180
+
+        // Echo feedback is capped well under 1.0 so repeats always decay
+        // out rather than building up into runaway resonance/clipping,
+        // even with the knob all the way up.
+        private const val ECHO_MAX_FEEDBACK = 0.45
     }
 
     @Volatile private var running = false
@@ -140,10 +153,164 @@ class BroadcastEngine(
     // proven capture pipeline is much safer than a second one.
     @Volatile private var localRecordingOut: OutputStream? = null
 
+    // Phase 9: cumulative bytes handed to the socket this session, for a
+    // rough "data used" readout on the Broadcast screen. Read-only from
+    // outside via bytesUploaded().
+    @Volatile private var bytesUploadedTotal: Long = 0L
+
+    // ---- Bass boost (Phase 9): RBJ-cookbook low-shelf biquad on the raw
+    // mic samples, applied before the existing fixed gain/clamp so the
+    // clamp still protects the final output regardless of how much extra
+    // level the shelf adds. Coefficients only recomputed when the level
+    // knob actually changes (setBassLevel), not per-sample. level 0 keeps
+    // the filter an exact identity pass-through (bit-identical to Phase 8
+    // behavior) so this is fully opt-in.
+    @Volatile private var bassLevel = initialBassLevel.coerceIn(0, 100)
+    @Volatile private var bassB0 = 1.0
+    @Volatile private var bassB1 = 0.0
+    @Volatile private var bassB2 = 0.0
+    @Volatile private var bassA1 = 0.0
+    @Volatile private var bassA2 = 0.0
+    // Filter history (x[n-1], x[n-2], y[n-1], y[n-2]) -- touched only by
+    // the capture thread, so these don't need @Volatile.
+    private var bassX1 = 0.0
+    private var bassX2 = 0.0
+    private var bassY1 = 0.0
+    private var bassY2 = 0.0
+
+    // ---- Echo (Phase 9): single delay line with decaying feedback, fixed
+    // ECHO_DELAY_MS delay time, knob controls both wet mix and how many
+    // repeats you hear before it decays out. Buffer size depends only on
+    // sampleRate (fixed for this engine's lifetime), so it's allocated
+    // once here and never touched by any thread but the capture thread --
+    // only echoFeedback (the actual per-sample multiplier) is shared
+    // across threads, and that's a single @Volatile Double.
+    @Volatile private var echoLevel = initialEchoLevel.coerceIn(0, 100)
+    @Volatile private var echoFeedback = (initialEchoLevel.coerceIn(0, 100) / 100.0) * ECHO_MAX_FEEDBACK
+    private val echoBuf = ShortArray((ECHO_DELAY_MS.toLong() * sampleRate / 1000).toInt().coerceAtLeast(1))
+    private var echoWriteIndex = 0
+
+    // ---- Self-monitor (Phase 9): optional live playback of the same
+    // post-effects audio being broadcast, so the broadcaster can hear what
+    // listeners hear. Off by default; routed via USAGE_VOICE_COMMUNICATION
+    // so it plays through the earpiece (quiet, directional) rather than
+    // the loud bottom speaker when no headphones are connected -- reduces
+    // (but doesn't eliminate) feedback-howl risk without headphones. The
+    // AudioTrack itself is created/destroyed only by the capture thread in
+    // reaction to this flag, so it's never touched from two threads at once.
+    @Volatile private var selfMonitorEnabled = false
+    private var monitorTrack: AudioTrack? = null
+
+    init {
+        recomputeBassCoefficients()
+    }
+
+    /** Cumulative bytes written to the socket so far this session (Phase 9 data-usage readout). */
+    fun bytesUploaded(): Long = bytesUploadedTotal
+
+    /** 0 = off (identity filter, zero CPU/behavior change). Up to +12dB low-shelf boost at 100. */
+    fun setBassLevel(level: Int) {
+        bassLevel = level.coerceIn(0, 100)
+        recomputeBassCoefficients()
+    }
+
+    /** 0 = off (no delay line applied at all). Controls both echo loudness and how long it decays. */
+    fun setEchoLevel(level: Int) {
+        echoLevel = level.coerceIn(0, 100)
+        echoFeedback = (echoLevel / 100.0) * ECHO_MAX_FEEDBACK
+    }
+
+    /** Toggles local playback of your own mic (via the earpiece unless headphones are connected). */
+    fun setSelfMonitor(enabled: Boolean) {
+        selfMonitorEnabled = enabled
+        DebugLog.log(if (enabled) "Self-monitor enabled" else "Self-monitor disabled")
+    }
+
+    private fun recomputeBassCoefficients() {
+        if (bassLevel <= 0) {
+            bassB0 = 1.0; bassB1 = 0.0; bassB2 = 0.0; bassA1 = 0.0; bassA2 = 0.0
+            return
+        }
+        val dB = bassLevel / 100.0 * 12.0
+        val f0 = 150.0
+        val fs = sampleRate.toDouble()
+        val a = Math.pow(10.0, dB / 40.0)
+        val w0 = 2.0 * Math.PI * f0 / fs
+        val cosW0 = Math.cos(w0)
+        val sinW0 = Math.sin(w0)
+        val shelfSlope = 1.0
+        val alpha = sinW0 / 2.0 * Math.sqrt((a + 1.0 / a) * (1.0 / shelfSlope - 1.0) + 2.0)
+        val sqrtA = Math.sqrt(a)
+
+        val b0 = a * ((a + 1) - (a - 1) * cosW0 + 2 * sqrtA * alpha)
+        val b1 = 2 * a * ((a - 1) - (a + 1) * cosW0)
+        val b2 = a * ((a + 1) - (a - 1) * cosW0 - 2 * sqrtA * alpha)
+        val a0 = (a + 1) + (a - 1) * cosW0 + 2 * sqrtA * alpha
+        val a1 = -2.0 * ((a - 1) + (a + 1) * cosW0)
+        val a2 = (a + 1) + (a - 1) * cosW0 - 2 * sqrtA * alpha
+
+        bassB0 = b0 / a0; bassB1 = b1 / a0; bassB2 = b2 / a0
+        bassA1 = a1 / a0; bassA2 = a2 / a0
+    }
+
+    private fun bassFilter(x: Double): Double {
+        val y = bassB0 * x + bassB1 * bassX1 + bassB2 * bassX2 - bassA1 * bassY1 - bassA2 * bassY2
+        bassX2 = bassX1; bassX1 = x
+        bassY2 = bassY1; bassY1 = y
+        return y
+    }
+
+    private fun echoEffect(x: Double): Double {
+        val delayed = echoBuf[echoWriteIndex].toDouble()
+        val mixed = x + delayed * echoFeedback
+        val clamped = mixed.coerceIn(Short.MIN_VALUE.toDouble(), Short.MAX_VALUE.toDouble())
+        echoBuf[echoWriteIndex] = clamped.toInt().toShort()
+        echoWriteIndex = (echoWriteIndex + 1) % echoBuf.size
+        return mixed
+    }
+
+    private fun createMonitorTrack(): AudioTrack? {
+        return try {
+            val minBuf = AudioTrack.getMinBufferSize(
+                sampleRate, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT
+            )
+            if (minBuf <= 0) return null
+            val attrs = android.media.AudioAttributes.Builder()
+                .setUsage(android.media.AudioAttributes.USAGE_VOICE_COMMUNICATION)
+                .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH)
+                .build()
+            val format = AudioFormat.Builder()
+                .setSampleRate(sampleRate)
+                .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                .build()
+            val track = AudioTrack.Builder()
+                .setAudioAttributes(attrs)
+                .setAudioFormat(format)
+                .setBufferSizeInBytes(minBuf * 2)
+                .setTransferMode(AudioTrack.MODE_STREAM)
+                .build()
+            track.play()
+            DebugLog.log("Self-monitor AudioTrack started")
+            track
+        } catch (t: Throwable) {
+            DebugLog.log("Self-monitor failed to start: ${t.javaClass.simpleName}: ${t.message}")
+            null
+        }
+    }
+
+    private fun releaseMonitorTrack() {
+        val track = monitorTrack ?: return
+        monitorTrack = null
+        try { track.stop() } catch (_: Throwable) {}
+        try { track.release() } catch (_: Throwable) {}
+    }
+
     fun start() {
         if (running) return
         running = true
         queue.clear()
+        bytesUploadedTotal = 0L
         DebugLog.log("Engine starting")
         // Confirms exactly which Settings values this session is actually
         // using (host/port hidden from the log deliberately -- username/
@@ -334,8 +501,14 @@ class BroadcastEngine(
                     } else {
                         read = audioRecord.read(pcmBuf, 0, pcmBuf.size, AudioRecord.READ_BLOCKING)
                         if (read > 0) {
-                            val (level, clipped) = applyGainAndMeasure(pcmBuf, read)
+                            val (level, clipped) = applyEffectsAndMeasure(pcmBuf, read)
                             reportLevel(level, clipped)
+                            if (selfMonitorEnabled) {
+                                if (monitorTrack == null) monitorTrack = createMonitorTrack()
+                                try { monitorTrack?.write(pcmBuf, 0, read) } catch (_: Throwable) {}
+                            } else if (monitorTrack != null) {
+                                releaseMonitorTrack()
+                            }
                         }
                     }
                     val inputBuffer = codec.getInputBuffer(inIndex)
@@ -376,22 +549,31 @@ class BroadcastEngine(
             audioRecord?.release()
             try { codec?.stop() } catch (_: Throwable) {}
             codec?.release()
+            releaseMonitorTrack()
         }
     }
 
     /**
-     * Boosts raw 16-bit little-endian PCM samples in place by GAIN_FACTOR
-     * (clamped to avoid hard-clipping distortion), and in the same pass
-     * measures the buffer's peak level (0-100) and whether any sample
+     * Runs each raw 16-bit little-endian PCM sample through the optional
+     * Bass Boost / Echo effects (Phase 9, each a no-op when its level is 0),
+     * then the existing fixed GAIN_FACTOR boost + hard clamp (unchanged
+     * from Phase 3-8 -- this still protects the final broadcast output from
+     * digital clipping no matter how much the effects add), and in the same
+     * pass measures the buffer's peak level (0-100) and whether any sample
      * actually hit the clamp -- feeds the UI's mic level/clipping meter
-     * (section 8) without a second pass over the buffer.
+     * (section 8) without a second pass over the buffer. With both effects
+     * at level 0 this produces bit-identical output to the pre-Phase-9
+     * behavior.
      */
-    private fun applyGainAndMeasure(buf: ByteArray, byteCount: Int): Pair<Int, Boolean> {
+    private fun applyEffectsAndMeasure(buf: ByteArray, byteCount: Int): Pair<Int, Boolean> {
         var peak = 0
         var clipped = false
         var i = 0
         while (i + 1 < byteCount) {
-            val sample = ((buf[i + 1].toInt() shl 8) or (buf[i].toInt() and 0xFF)).toShort()
+            var sample = ((buf[i + 1].toInt() shl 8) or (buf[i].toInt() and 0xFF)).toShort().toDouble()
+            if (bassLevel > 0) sample = bassFilter(sample)
+            if (echoLevel > 0) sample = echoEffect(sample)
+
             val rawBoosted = (sample * GAIN_FACTOR).toInt()
             if (rawBoosted > Short.MAX_VALUE || rawBoosted < Short.MIN_VALUE) clipped = true
             val boosted = rawBoosted.coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
@@ -626,7 +808,9 @@ class BroadcastEngine(
             if (coalesced.size() == 0) continue
 
             try {
-                currentUploader?.writeAdtsFrame(coalesced.toByteArray())
+                val payload = coalesced.toByteArray()
+                currentUploader?.writeAdtsFrame(payload)
+                bytesUploadedTotal += payload.size
             } catch (e: IOException) {
                 lastError = "${e.javaClass.simpleName}: ${e.message}"
                 currentUploader?.close()

@@ -3,9 +3,13 @@ package org.waqashq.majlisbroadcast
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.Typeface
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.net.Uri
+import android.os.BatteryManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -20,9 +24,11 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
+import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import java.util.Locale
 
@@ -45,6 +51,11 @@ import java.util.Locale
  */
 class MainActivity : AppCompatActivity() {
 
+    companion object {
+        /** Phase 9: home-screen "Go Live" shortcut extra, forwarded through Login -> Splash -> here. */
+        const val EXTRA_AUTO_GO_LIVE = "org.waqashq.majlisbroadcast.extra.AUTO_GO_LIVE"
+    }
+
     private val prefBatteryExemptionAsked = "battery_exemption_asked"
     private val prefsName = "majlis_prefs"
 
@@ -65,8 +76,21 @@ class MainActivity : AppCompatActivity() {
     private lateinit var micClippingText: TextView
     private lateinit var listenerCountText: TextView
     private lateinit var shareButton: LinearLayout
+    private lateinit var dataUsageText: TextView
+    private lateinit var monitorButton: Button
+    private lateinit var bassSeekBar: SeekBar
+    private lateinit var bassValueText: TextView
+    private lateinit var echoSeekBar: SeekBar
+    private lateinit var echoValueText: TextView
 
     private var isLive = false
+    // Phase 9: self-monitor is always OFF at the start of every broadcast
+    // (safety default -- see BroadcastEngine), tracked here just to drive
+    // this button's on/off styling.
+    private var selfMonitorOn = false
+    // Phase 9: set from the "Go Live" shortcut's intent extra, consumed
+    // (set back to false) the first time maybeAutoGoLive() actually fires.
+    private var pendingAutoGoLive = false
     private val uiHandler = Handler(Looper.getMainLooper())
     private val livePoller = object : Runnable {
         override fun run() {
@@ -100,6 +124,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        pendingAutoGoLive = intent?.getBooleanExtra(EXTRA_AUTO_GO_LIVE, false) == true
         buildUi()
         DebugLog.log("App opened")
 
@@ -120,7 +145,9 @@ class MainActivity : AppCompatActivity() {
             BroadcastService.state == BroadcastEngine.State.RECONNECTING
         ) {
             isLive = true
+            selfMonitorOn = BroadcastService.selfMonitorEnabled
             updateGoLiveButtonStyle()
+            updateMonitorButtonStyle()
             uiHandler.post(livePoller)
         }
     }
@@ -244,6 +271,17 @@ class MainActivity : AppCompatActivity() {
         }
         recordButton.setOnClickListener { onRecordClicked() }
 
+        // Phase 9: self-monitor toggle -- hear your own mic (via earpiece
+        // unless headphones are connected) to confirm audio quality without
+        // a second device. Off by default every session.
+        monitorButton = Button(this).apply {
+            textSize = 14f
+            setTypeface(typeface, Typeface.BOLD)
+            isAllCaps = false
+            setPadding(0, 22, 0, 22)
+        }
+        monitorButton.setOnClickListener { onMonitorClicked() }
+
         // ---- mic + waveform + bitrate row ----
         val meterRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -297,7 +335,7 @@ class MainActivity : AppCompatActivity() {
 
         listOf(
             statusPill, latencyRow, elapsedText, statusSubtitle,
-            goLiveButton, recordButton, meterRow, micClippingText
+            goLiveButton, recordButton, monitorButton, meterRow, micClippingText
         ).forEach {
             card.addView(
                 it,
@@ -312,16 +350,115 @@ class MainActivity : AppCompatActivity() {
         // and Start Recording -> the mic/waveform row.
         goLiveButton.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 44 }
         recordButton.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 28 }
+        monitorButton.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 20 }
         meterRow.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 40 }
         micClippingText.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 20 }
 
         scrollContent.addView(card, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+
+        // ---- Voice effects card (Phase 9): optional Bass Boost / Echo,
+        // both default to whatever was last saved (0/off on a fresh
+        // install). Applied live via BroadcastService while on air;
+        // otherwise just remembered in AppSettings for the next session. ----
+        val fxCard = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = UiTheme.studioCard()
+            setPadding(48, 32, 48, 32)
+        }
+        val fxTitle = TextView(this).apply {
+            text = getString(R.string.fx_section_title)
+            textSize = 14f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(UiTheme.STUDIO_BORDER_TEAL)
+            gravity = Gravity.CENTER
+        }
+        fxCard.addView(fxTitle)
+
+        val bassLabelRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val bassLabel = TextView(this).apply {
+            text = getString(R.string.fx_bass_label)
+            textSize = 13f
+            setTextColor(UiTheme.STUDIO_TEXT_PRIMARY)
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        bassValueText = TextView(this).apply {
+            textSize = 13f
+            setTextColor(UiTheme.STUDIO_TEXT_MUTED)
+        }
+        bassLabelRow.addView(bassLabel)
+        bassLabelRow.addView(bassValueText)
+        fxCard.addView(bassLabelRow, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 24 })
+
+        bassSeekBar = SeekBar(this).apply {
+            max = 100
+            progress = AppSettings.bassLevel(this@MainActivity)
+            progressTintList = ColorStateList.valueOf(UiTheme.STUDIO_BORDER_TEAL)
+            thumbTintList = ColorStateList.valueOf(UiTheme.STUDIO_BORDER_TEAL)
+        }
+        bassValueText.text = getString(R.string.fx_percent_format, bassSeekBar.progress)
+        bassSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                bassValueText.text = getString(R.string.fx_percent_format, progress)
+            }
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {
+                val level = seekBar?.progress ?: 0
+                AppSettings.saveBassLevel(this@MainActivity, level)
+                if (isLive) BroadcastService.setBassLevel(this@MainActivity, level)
+            }
+        })
+        fxCard.addView(bassSeekBar, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 4 })
+
+        val echoLabelRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val echoLabel = TextView(this).apply {
+            text = getString(R.string.fx_echo_label)
+            textSize = 13f
+            setTextColor(UiTheme.STUDIO_TEXT_PRIMARY)
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        echoValueText = TextView(this).apply {
+            textSize = 13f
+            setTextColor(UiTheme.STUDIO_TEXT_MUTED)
+        }
+        echoLabelRow.addView(echoLabel)
+        echoLabelRow.addView(echoValueText)
+        fxCard.addView(echoLabelRow, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 20 })
+
+        echoSeekBar = SeekBar(this).apply {
+            max = 100
+            progress = AppSettings.echoLevel(this@MainActivity)
+            progressTintList = ColorStateList.valueOf(UiTheme.STUDIO_BORDER_TEAL)
+            thumbTintList = ColorStateList.valueOf(UiTheme.STUDIO_BORDER_TEAL)
+        }
+        echoValueText.text = getString(R.string.fx_percent_format, echoSeekBar.progress)
+        echoSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                echoValueText.text = getString(R.string.fx_percent_format, progress)
+            }
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {
+                val level = seekBar?.progress ?: 0
+                AppSettings.saveEchoLevel(this@MainActivity, level)
+                if (isLive) BroadcastService.setEchoLevel(this@MainActivity, level)
+            }
+        })
+        fxCard.addView(echoSeekBar, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 4 })
+
+        scrollContent.addView(
+            fxCard,
+            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 28 }
+        )
 
         // ---- Listeners + Share (below the card) ----
         listenerCountText = TextView(this).apply {
             textSize = 18f
             setTypeface(typeface, Typeface.BOLD)
             setTextColor(UiTheme.STUDIO_ON_AIR_GREEN)
+            gravity = Gravity.CENTER
+        }
+        dataUsageText = TextView(this).apply {
+            textSize = 12f
+            setTextColor(UiTheme.STUDIO_TEXT_MUTED)
             gravity = Gravity.CENTER
         }
         // Solid fill (distinct from the outline style used elsewhere), per
@@ -353,14 +490,18 @@ class MainActivity : AppCompatActivity() {
         }
         shareButton.setOnClickListener { onShareClicked() }
 
-        listOf(listenerCountText, shareButton).forEach {
-            scrollContent.addView(
-                it,
-                LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-                    topMargin = 40
-                }
-            )
-        }
+        scrollContent.addView(
+            listenerCountText,
+            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 40 }
+        )
+        scrollContent.addView(
+            dataUsageText,
+            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 6 }
+        )
+        scrollContent.addView(
+            shareButton,
+            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 40 }
+        )
 
         val scrollView = ScrollView(this).apply { addView(scrollContent) }
 
@@ -370,9 +511,15 @@ class MainActivity : AppCompatActivity() {
             setBackgroundColor(UiTheme.STUDIO_CARD_BG)
         }
         val navBroadcast = buildNavTab(R.drawable.ic_radio, getString(R.string.nav_broadcast), active = true)
+        val navRecordings = buildNavTab(R.drawable.ic_mic, getString(R.string.nav_recordings), active = false)
+        navRecordings.setOnClickListener { startActivity(Intent(this, RecordingsActivity::class.java)) }
+        val navHistory = buildNavTab(R.drawable.ic_history, getString(R.string.nav_history), active = false)
+        navHistory.setOnClickListener { startActivity(Intent(this, HistoryActivity::class.java)) }
         val navSettings = buildNavTab(R.drawable.ic_settings_sliders, getString(R.string.btn_settings), active = false)
         navSettings.setOnClickListener { startActivity(Intent(this, SettingsActivity::class.java)) }
         nav.addView(navBroadcast, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        nav.addView(navRecordings, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        nav.addView(navHistory, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         nav.addView(navSettings, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
 
         root.addView(header, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
@@ -383,6 +530,7 @@ class MainActivity : AppCompatActivity() {
 
         updateGoLiveButtonStyle()
         updateRecordButtonStyle()
+        updateMonitorButtonStyle()
         refreshStaticInfo()
     }
 
@@ -503,6 +651,23 @@ class MainActivity : AppCompatActivity() {
             return
         }
         refreshStaticInfo()
+        maybeAutoGoLive()
+    }
+
+    /**
+     * Phase 9: fires the "Go Live" shortcut's intent once every first-run
+     * gate (mic/notification permission, battery-exemption prompt) has
+     * already cleared -- reuses onGoLiveClicked() itself so the battery-low
+     * confirmation and every other normal safety check still applies.
+     * Consume-once: won't re-fire on a later permission-callback re-entry
+     * or if you're already live.
+     */
+    private fun maybeAutoGoLive() {
+        if (!pendingAutoGoLive) return
+        pendingAutoGoLive = false
+        if (isLive) return
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) return
+        onGoLiveClicked()
     }
 
     // ================= Go Live =================
@@ -518,32 +683,32 @@ class MainActivity : AppCompatActivity() {
                 statusSubtitle.text = getString(R.string.status_live_missing_secrets)
                 return
             }
-            DebugLog.log("Go Live tapped")
-            // Snapshot now, not just at buildUi() time -- this is the
-            // exact value BroadcastService/BroadcastEngine will read a
-            // moment from now, so the meter reflects the actual running
-            // session even if Settings was changed since the app opened.
-            bitrateText.text = currentBitrateLabel()
-            BroadcastService.start(this)
-            isLive = true
-            updateGoLiveButtonStyle()
-            updateRecordButtonStyle()
-            applyStatusStyle(BroadcastEngine.State.CONNECTING, callMuted = false, manualMuted = false)
-            uiHandler.post(livePoller)
-            awaitStateAndShowDialog(
-                setOf(BroadcastEngine.State.LIVE),
-                getString(R.string.dialog_broadcast_started)
-            )
+            // Phase 9: a majlis can run 1-2+ hours -- catch a low, unplugged
+            // battery before going live rather than mid-session. Purely a
+            // heads-up; the user can still choose to continue.
+            if (isBatteryLow()) {
+                AlertDialog.Builder(this, androidx.appcompat.R.style.Theme_AppCompat_Dialog)
+                    .setTitle(getString(R.string.battery_low_title))
+                    .setMessage(getString(R.string.battery_low_message, currentBatteryPercent()))
+                    .setPositiveButton(getString(R.string.battery_low_continue)) { _, _ -> startBroadcastNow() }
+                    .setNegativeButton(getString(R.string.battery_low_cancel), null)
+                    .show()
+                return
+            }
+            startBroadcastNow()
         } else {
             DebugLog.log("Stop tapped")
             BroadcastService.stop(this)
             isLive = false
+            selfMonitorOn = false
             updateGoLiveButtonStyle()
             updateRecordButtonStyle()
+            updateMonitorButtonStyle()
             applyStatusStyle(BroadcastEngine.State.STOPPED, callMuted = false, manualMuted = false)
             elapsedText.text = ""
             latencyText.text = getString(R.string.latency_unavailable)
             listenerCountText.text = getString(R.string.listener_count_unavailable)
+            dataUsageText.text = ""
             waveform.reset()
             uiHandler.removeCallbacks(livePoller)
             awaitStateAndShowDialog(
@@ -551,6 +716,74 @@ class MainActivity : AppCompatActivity() {
                 getString(R.string.dialog_broadcast_ended)
             )
         }
+    }
+
+    private fun startBroadcastNow() {
+        DebugLog.log("Go Live tapped")
+        // Snapshot now, not just at buildUi() time -- this is the
+        // exact value BroadcastService/BroadcastEngine will read a
+        // moment from now, so the meter reflects the actual running
+        // session even if Settings was changed since the app opened.
+        bitrateText.text = currentBitrateLabel()
+        BroadcastService.start(this)
+        isLive = true
+        updateGoLiveButtonStyle()
+        updateRecordButtonStyle()
+        updateMonitorButtonStyle()
+        applyStatusStyle(BroadcastEngine.State.CONNECTING, callMuted = false, manualMuted = false)
+        uiHandler.post(livePoller)
+        awaitStateAndShowDialog(
+            setOf(BroadcastEngine.State.LIVE),
+            getString(R.string.dialog_broadcast_started)
+        )
+    }
+
+    // ================= Battery / data (Phase 9) =================
+
+    private fun isBatteryLow(): Boolean {
+        val bm = getSystemService(BATTERY_SERVICE) as? BatteryManager ?: return false
+        return try {
+            val level = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+            level in 1..20 && !bm.isCharging
+        } catch (_: Throwable) {
+            false
+        }
+    }
+
+    private fun currentBatteryPercent(): Int {
+        val bm = getSystemService(BATTERY_SERVICE) as? BatteryManager ?: return 100
+        return try {
+            bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+        } catch (_: Throwable) {
+            100
+        }
+    }
+
+    private fun isOnMobileData(): Boolean {
+        val cm = getSystemService(CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return false
+        val network = cm.activeNetwork ?: return false
+        val caps = cm.getNetworkCapabilities(network) ?: return false
+        return caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)
+    }
+
+    // ================= Self-monitor (Phase 9) =================
+
+    private fun onMonitorClicked() {
+        if (!isLive) return
+        selfMonitorOn = !selfMonitorOn
+        BroadcastService.setSelfMonitor(this, selfMonitorOn)
+        updateMonitorButtonStyle()
+        if (selfMonitorOn) {
+            Toast.makeText(this, getString(R.string.monitor_headphone_warning), Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun updateMonitorButtonStyle() {
+        monitorButton.text = getString(if (selfMonitorOn) R.string.btn_monitor_on else R.string.btn_monitor_off)
+        monitorButton.background = UiTheme.outlinePillBackground(if (selfMonitorOn) UiTheme.STUDIO_AMBER else UiTheme.STUDIO_TEXT_MUTED)
+        monitorButton.setTextColor(if (selfMonitorOn) UiTheme.STUDIO_AMBER else UiTheme.STUDIO_TEXT_PRIMARY)
+        monitorButton.isEnabled = isLive
+        monitorButton.alpha = if (isLive) 1f else 0.5f
     }
 
     /**
@@ -649,11 +882,14 @@ class MainActivity : AppCompatActivity() {
             BroadcastEngine.State.STOPPED, BroadcastEngine.State.IDLE -> {
                 if (isLive) {
                     isLive = false
+                    selfMonitorOn = false
                     updateGoLiveButtonStyle()
                     updateRecordButtonStyle()
+                    updateMonitorButtonStyle()
                     elapsedText.text = ""
                     latencyText.text = getString(R.string.latency_unavailable)
                     listenerCountText.text = getString(R.string.listener_count_unavailable)
+                    dataUsageText.text = ""
                     waveform.reset()
                     uiHandler.removeCallbacks(livePoller)
                 }
@@ -681,6 +917,12 @@ class MainActivity : AppCompatActivity() {
             getString(R.string.listener_count_label, count)
         } else {
             getString(R.string.listener_count_unavailable)
+        }
+
+        if (isLive) {
+            val mb = BroadcastService.bytesUploadedTotal / 1024.0 / 1024.0
+            val connLabel = getString(if (isOnMobileData()) R.string.data_conn_mobile else R.string.data_conn_wifi)
+            dataUsageText.text = getString(R.string.data_usage_format, mb, connLabel)
         }
 
         updateRecordButtonStyle()

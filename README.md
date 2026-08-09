@@ -100,3 +100,16 @@ Local recordings are saved to the public Music/Malfoozat e Akhtar folder
 (via MediaStore on Android 10+) so they're visible in the Files app and
 any music player -- an earlier version wrote them to app-private storage,
 which Android 11+ hides from normal file browsing.
+
+Phase 9, at the user's request: an in-app Recordings screen (play/share
+without leaving the app or hunting through the Music folder), a Session
+History screen (date, duration, peak listeners, data used for each past
+broadcast, logged locally), a data-used + Wi-Fi/mobile-data readout and a
+low-battery confirmation prompt before going live, a self-monitor toggle
+(hear your own mic through the earpiece, off by default -- use
+headphones), optional Bass Boost / Echo voice effects with 0-100 knobs
+(off by default, applied to the raw mic signal before the existing
+fixed-gain clamp so clipping protection still holds), and a static
+"Go Live" home-screen shortcut (long-press the app icon) that still goes
+through the same login gate, just auto-starts the broadcast once you're
+in.

@@ -219,7 +219,16 @@ class LoginActivity : AppCompatActivity() {
     }
 
     private fun proceed() {
-        startActivity(Intent(this, SplashActivity::class.java))
+        val target = Intent(this, SplashActivity::class.java)
+        // Phase 9: forward the home-screen "Go Live" shortcut's intent
+        // through Login -> Splash -> MainActivity, which auto-triggers Go
+        // Live once it lands (still gated by the same login/permission
+        // checks everyone else goes through -- this only saves taps once
+        // you're already through them).
+        if (intent.getBooleanExtra(MainActivity.EXTRA_AUTO_GO_LIVE, false)) {
+            target.putExtra(MainActivity.EXTRA_AUTO_GO_LIVE, true)
+        }
+        startActivity(target)
         finish()
     }
 

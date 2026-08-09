@@ -117,4 +117,41 @@
     <string name="btn_share_event">ایونٹ شیئر کریں</string>
     <string name="share_event_chooser_title">سننے کا لنک شیئر کریں</string>
     <string name="share_event_unavailable">سننے کا لنک ترتیب نہیں دیا گیا — Settings/secrets.properties چیک کریں</string>
+
+    <string name="nav_recordings">ریکارڈنگز</string>
+    <string name="nav_history">تاریخچہ</string>
+
+    <string name="fx_section_title">آواز کے اثرات</string>
+    <string name="fx_bass_label">بیس بوسٹ</string>
+    <string name="fx_echo_label">بازگشت</string>
+    <string name="fx_percent_format">%1$d%%</string>
+
+    <string name="btn_monitor_off">مانیٹر: بند</string>
+    <string name="btn_monitor_on">مانیٹر: چالو</string>
+    <string name="monitor_headphone_warning">فیڈبیک سے بچنے کے لیے ہیڈفون استعمال کریں</string>
+
+    <string name="data_conn_wifi">وائی فائی</string>
+    <string name="data_conn_mobile">موبائل ڈیٹا</string>
+    <string name="data_usage_format">%1$.1f MB استعمال ہوا (%2$s)</string>
+
+    <string name="battery_low_title">بیٹری کم ہے</string>
+    <string name="battery_low_message">آپ کی بیٹری %1$d%% ہے اور چارج نہیں ہو رہی۔ مجلس کافی دیر چل سکتی ہے -- پھر بھی جاری رکھیں؟</string>
+    <string name="battery_low_continue">پھر بھی لائیو جائیں</string>
+    <string name="battery_low_cancel">منسوخ کریں</string>
+
+    <string name="recordings_title">ریکارڈنگز</string>
+    <string name="recordings_empty">ابھی تک کوئی ریکارڈنگ نہیں۔</string>
+    <string name="recordings_row_detail">%1$s -- %2$s -- %3$s MB</string>
+    <string name="btn_play">چلائیں</string>
+    <string name="btn_stop_playback">روکیں</string>
+    <string name="btn_share">شیئر کریں</string>
+    <string name="recordings_play_failed">یہ ریکارڈنگ نہیں چلائی جا سکی</string>
+    <string name="recordings_share_chooser_title">ریکارڈنگ شیئر کریں</string>
+
+    <string name="history_title">نشریات کی تاریخچہ</string>
+    <string name="history_empty">ابھی تک کوئی نشریہ درج نہیں۔</string>
+    <string name="history_row_detail">دورانیہ %1$s -- زیادہ سے زیادہ %2$d سامعین -- %3$s MB</string>
+
+    <string name="shortcut_go_live_short">لائیو جائیں</string>
+    <string name="shortcut_go_live_long">لائیو جائیں (مجلس نشریہ)</string>
 </resources>

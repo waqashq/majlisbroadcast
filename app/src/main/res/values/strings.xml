@@ -117,4 +117,41 @@
     <string name="btn_share_event">Share Event</string>
     <string name="share_event_chooser_title">Share listen link</string>
     <string name="share_event_unavailable">Listen link not configured — check Settings/secrets.properties</string>
+
+    <string name="nav_recordings">Recordings</string>
+    <string name="nav_history">History</string>
+
+    <string name="fx_section_title">Voice Effects</string>
+    <string name="fx_bass_label">Bass Boost</string>
+    <string name="fx_echo_label">Echo</string>
+    <string name="fx_percent_format">%1$d%%</string>
+
+    <string name="btn_monitor_off">Monitor: Off</string>
+    <string name="btn_monitor_on">Monitor: On</string>
+    <string name="monitor_headphone_warning">Use headphones to avoid feedback/howling</string>
+
+    <string name="data_conn_wifi">Wi-Fi</string>
+    <string name="data_conn_mobile">Mobile Data</string>
+    <string name="data_usage_format">%1$.1f MB used (%2$s)</string>
+
+    <string name="battery_low_title">Battery Low</string>
+    <string name="battery_low_message">Your battery is at %1$d%% and not charging. A majlis can run a while -- continue anyway?</string>
+    <string name="battery_low_continue">Go Live Anyway</string>
+    <string name="battery_low_cancel">Cancel</string>
+
+    <string name="recordings_title">Recordings</string>
+    <string name="recordings_empty">No recordings yet.</string>
+    <string name="recordings_row_detail">%1$s -- %2$s -- %3$s MB</string>
+    <string name="btn_play">Play</string>
+    <string name="btn_stop_playback">Stop</string>
+    <string name="btn_share">Share</string>
+    <string name="recordings_play_failed">Couldn\'t play this recording</string>
+    <string name="recordings_share_chooser_title">Share recording</string>
+
+    <string name="history_title">Session History</string>
+    <string name="history_empty">No sessions logged yet.</string>
+    <string name="history_row_detail">Duration %1$s -- Peak %2$d listeners -- %3$s MB</string>
+
+    <string name="shortcut_go_live_short">Go Live</string>
+    <string name="shortcut_go_live_long">Go Live (Majlis Broadcast)</string>
 </resources>
