@@ -581,8 +581,9 @@ class MainActivity : AppCompatActivity() {
         if (!isLive) return
         if (BroadcastService.isRecording) {
             BroadcastService.stopRecording(this)
-            BroadcastService.lastRecordingFileName?.let {
-                Toast.makeText(this, getString(R.string.recording_saved_toast, it), Toast.LENGTH_SHORT).show()
+            BroadcastService.lastRecordingFileName?.let { name ->
+                val location = BroadcastService.lastRecordingLocation ?: "Music"
+                Toast.makeText(this, getString(R.string.recording_saved_toast, name, location), Toast.LENGTH_LONG).show()
             }
         } else {
             BroadcastService.startRecording(this)

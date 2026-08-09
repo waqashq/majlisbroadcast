@@ -96,3 +96,7 @@ resilient to network state), and a bottom nav (Broadcast / Settings)
 replacing the old top-right Settings button. AzuraCast's own server-side
 live-broadcast recording is also available (station profile setting) and
 is the recommended primary copy; local recording is a phone-side backup.
+Local recordings are saved to the public Music/Malfoozat e Akhtar folder
+(via MediaStore on Android 10+) so they're visible in the Files app and
+any music player -- an earlier version wrote them to app-private storage,
+which Android 11+ hides from normal file browsing.

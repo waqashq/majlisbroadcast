@@ -104,7 +104,7 @@
 
     <string name="btn_start_recording">ریکارڈنگ شروع کریں</string>
     <string name="btn_stop_recording">ریکارڈنگ روکیں</string>
-    <string name="recording_saved_toast">ریکارڈنگ محفوظ ہوگئی: %1$s</string>
+    <string name="recording_saved_toast">%2$s میں محفوظ ہوگئی: %1$s</string>
 
     <string name="nav_broadcast">نشریات</string>
 

@@ -104,7 +104,7 @@
 
     <string name="btn_start_recording">Start Recording</string>
     <string name="btn_stop_recording">Stop Recording</string>
-    <string name="recording_saved_toast">Recording saved: %1$s</string>
+    <string name="recording_saved_toast">Saved to %2$s: %1$s</string>
 
     <string name="nav_broadcast">Broadcast</string>
 

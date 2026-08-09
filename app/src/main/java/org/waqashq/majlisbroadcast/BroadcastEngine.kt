@@ -11,9 +11,8 @@ import android.media.MediaRecorder
 import android.os.Process
 import android.os.SystemClock
 import java.io.ByteArrayOutputStream
-import java.io.File
-import java.io.FileOutputStream
 import java.io.IOException
+import java.io.OutputStream
 
 /**
  * Phase 3 pipeline: capture + AAC-LC + ADTS on a dedicated capture/encode
@@ -139,7 +138,7 @@ class BroadcastEngine(
     // unreliable across OEMs (this project already hit real device-specific
     // socket/capture quirks on the Honor test device), so reusing the one
     // proven capture pipeline is much safer than a second one.
-    @Volatile private var localRecordingOut: FileOutputStream? = null
+    @Volatile private var localRecordingOut: OutputStream? = null
 
     fun start() {
         if (running) return
@@ -193,14 +192,15 @@ class BroadcastEngine(
     /**
      * Starts (or restarts) writing a local copy of the same encoded ADTS
      * stream that's being broadcast, independent of network/LIVE state --
-     * recording keeps working through a reconnect gap. Returns false if the
-     * file couldn't be opened.
+     * recording keeps working through a reconnect gap. The caller (Service)
+     * owns where the stream points -- a publicly-visible MediaStore entry on
+     * modern Android, a legacy public file on very old Android. Returns
+     * false if recording couldn't be started.
      */
-    fun startLocalRecording(file: File): Boolean {
+    fun startLocalRecording(out: OutputStream): Boolean {
         return try {
-            file.parentFile?.mkdirs()
-            localRecordingOut = FileOutputStream(file)
-            DebugLog.log("Local recording started: ${file.name}")
+            localRecordingOut = out
+            DebugLog.log("Local recording started")
             true
         } catch (t: Throwable) {
             DebugLog.log("Local recording failed to start: ${t.javaClass.simpleName}: ${t.message}")
