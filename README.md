@@ -147,3 +147,9 @@ everywhere (Recordings screen, Files app, any music player) -- it looked
 like it was never saved. `stopBroadcast()` and `onDestroy()` now finalize
 an in-progress recording themselves before tearing down, using the same
 path "Stop Recording" already used.
+
+Phase 9f, at the user's request: the large standalone logo at the top of
+the Broadcast screen is gone -- it's now a small badge sitting beside the
+"Malfoozat e Akhtar" title in the header row itself, start-aligned (reads
+left-aligned in English, mirrors to right-aligned in Urdu automatically via
+RTL layout direction, same as the rest of the app).

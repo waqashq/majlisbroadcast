@@ -179,32 +179,20 @@ class MainActivity : AppCompatActivity() {
 
         // ---- Top header bar -- full width, fixed (not part of the
         // scrollable content), green background matching the logo's brand
-        // color, white contrasting centered text. Sits directly below the
-        // system status bar. ----
-        val header = TextView(this).apply {
-            text = getString(R.string.app_name)
-            textSize = 18f
-            setTypeface(typeface, Typeface.BOLD)
-            setTextColor(Color.WHITE)
-            gravity = Gravity.CENTER
-            setBackgroundColor(UiTheme.PRIMARY_GREEN)
-            setPadding(24, 32, 24, 24)
-        }
-
-        val scrollContent = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(40, 40, 40, 40)
-        }
-
-        // ---- Logo header -- same badge artwork as the launcher icon, per
-        // user request to reuse it inside the app (loading screen + here). ----
-        val logo = ImageView(this).apply {
+        // color, white text. Previously a large centered logo sat alone at
+        // the top of the scrollable content with a plain centered text
+        // header below it; per user request the logo is now a small badge
+        // sitting right beside the "Malfoozat e Akhtar" title in this one
+        // header row, both start-aligned -- Gravity.START (not an explicit
+        // left/right) so this reads left-aligned in English and mirrors to
+        // right-aligned in Urdu automatically via RTL layout direction,
+        // same as everywhere else in the app that doesn't hardcode a side.
+        val headerLogo = ImageView(this).apply {
             setImageResource(R.mipmap.ic_launcher_foreground)
             scaleType = ImageView.ScaleType.CENTER_CROP
-            val size = (88 * resources.displayMetrics.density).toInt()
+            val size = (32 * resources.displayMetrics.density).toInt()
             layoutParams = LinearLayout.LayoutParams(size, size).apply {
-                gravity = Gravity.CENTER_HORIZONTAL
-                bottomMargin = (20 * resources.displayMetrics.density).toInt()
+                marginEnd = (12 * resources.displayMetrics.density).toInt()
             }
             clipToOutline = true
             outlineProvider = object : android.view.ViewOutlineProvider() {
@@ -213,7 +201,25 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
-        scrollContent.addView(logo)
+        val headerTitle = TextView(this).apply {
+            text = getString(R.string.app_name)
+            textSize = 18f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(Color.WHITE)
+        }
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.START or Gravity.CENTER_VERTICAL
+            setBackgroundColor(UiTheme.PRIMARY_GREEN)
+            setPadding(24, 32, 24, 24)
+            addView(headerLogo)
+            addView(headerTitle)
+        }
+
+        val scrollContent = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(40, 40, 40, 40)
+        }
 
         // ---- Card ----
         val card = LinearLayout(this).apply {
