@@ -175,7 +175,11 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
         }
     }
 
-    private var engine: BroadcastEngine? = null
+    // Phase 9: now also read from the listenerPoll background thread (for
+    // the bytes-uploaded mirror), in addition to the main-thread-only
+    // callers this already had -- @Volatile makes that cross-thread read
+    // well-defined instead of relying on incidental JVM/ART behavior.
+    @Volatile private var engine: BroadcastEngine? = null
     private var wakeLock: PowerManager.WakeLock? = null
     private var wifiLock: WifiManager.WifiLock? = null
 

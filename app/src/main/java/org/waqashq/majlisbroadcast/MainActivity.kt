@@ -134,12 +134,15 @@ class MainActivity : AppCompatActivity() {
         // having to do anything. Cheap no-op once nothing's left to move.
         migrateOldRecordingsIfAny()
 
-        // First-run permission chain fires immediately on open, not just
-        // when Go Live is tapped (section 7: "First-run: request...").
-        proceedWithFirstRunChecks()
-
         // If the service is already live from before this Activity was
-        // (re)created, reflect that immediately instead of a stale button.
+        // (re)created, reflect that immediately -- this MUST run before
+        // proceedWithFirstRunChecks() below, since that can synchronously
+        // reach maybeAutoGoLive() (Phase 9 shortcut flow), whose "don't
+        // fire if already live" guard depends on isLive already being
+        // correct. Without this ordering, recreating this Activity (e.g. a
+        // rotation -- this screen isn't orientation-locked) while a
+        // shortcut-started broadcast is already live could fire Go Live a
+        // second time and pop a spurious "Broadcast Started" dialog.
         if (BroadcastService.state == BroadcastEngine.State.LIVE ||
             BroadcastService.state == BroadcastEngine.State.CONNECTING ||
             BroadcastService.state == BroadcastEngine.State.RECONNECTING
@@ -150,6 +153,10 @@ class MainActivity : AppCompatActivity() {
             updateMonitorButtonStyle()
             uiHandler.post(livePoller)
         }
+
+        // First-run permission chain fires immediately on open, not just
+        // when Go Live is tapped (section 7: "First-run: request...").
+        proceedWithFirstRunChecks()
     }
 
     override fun onResume() {

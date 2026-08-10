@@ -505,7 +505,18 @@ class BroadcastEngine(
                             reportLevel(level, clipped)
                             if (selfMonitorEnabled) {
                                 if (monitorTrack == null) monitorTrack = createMonitorTrack()
-                                try { monitorTrack?.write(pcmBuf, 0, read) } catch (_: Throwable) {}
+                                // WRITE_NON_BLOCKING is essential here: this
+                                // write sits in the capture thread's hot
+                                // loop, and a stalled/blocked monitor
+                                // AudioTrack must never be able to stall
+                                // capture (and so the actual broadcast) --
+                                // worst case a non-blocking write just drops
+                                // some monitor audio, which is a self-
+                                // monitoring nicety, not the broadcast
+                                // itself.
+                                try {
+                                    monitorTrack?.write(pcmBuf, 0, read, AudioTrack.WRITE_NON_BLOCKING)
+                                } catch (_: Throwable) {}
                             } else if (monitorTrack != null) {
                                 releaseMonitorTrack()
                             }
