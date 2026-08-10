@@ -268,6 +268,16 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
         // still an active `microphone` FGS can trip the Android 14+
         // watchdog.
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+        // Finalize any in-progress local recording BEFORE tearing down the
+        // engine -- previously, stopping the broadcast without first
+        // tapping "Stop Recording" left the recording stuck: engine.stop()
+        // below closes the file's OutputStream (bytes are all there), but
+        // never clears the MediaStore row's IS_PENDING flag, so the file
+        // was invisible in the Recordings screen, Files app, and every
+        // other app -- it looked like it was never saved at all.
+        // endLocalRecording() is the same finalize path "Stop Recording"
+        // already uses, so calling it here covers the case the user forgot.
+        if (isRecording) endLocalRecording()
         engine?.stop() // also flushes/closes any open local recording
         engine = null
         unregisterNetworkCallback()
@@ -275,7 +285,6 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
         releaseLocks()
         stopListenerPolling()
         recordSessionHistoryIfMeaningful()
-        isRecording = false
         manuallyMuted = false
         state = BroadcastEngine.State.STOPPED
         sessionStartRealtime = 0
@@ -343,6 +352,10 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
 
     override fun onDestroy() {
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+        // Same finalize-before-teardown safety net as stopBroadcast() --
+        // covers the service being torn down some other way (e.g. the OS
+        // killing it) while a recording was still in progress.
+        if (isRecording) endLocalRecording()
         engine?.stop()
         engine = null
         unregisterNetworkCallback()
@@ -350,7 +363,6 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
         releaseLocks()
         stopListenerPolling()
         recordSessionHistoryIfMeaningful()
-        isRecording = false
         manuallyMuted = false
         sessionStartRealtime = 0
         super.onDestroy()

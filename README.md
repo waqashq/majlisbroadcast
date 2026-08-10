@@ -138,3 +138,12 @@ Phase 9d, at the user's request: removed the self-monitor toggle (earpiece
 playback of your own live mic) entirely -- the button, its BroadcastEngine
 AudioTrack plumbing, and the BroadcastService action that toggled it are
 all gone. Bass Boost / Echo and everything else from Phase 9 are unaffected.
+
+Phase 9e: fixed a real bug -- stopping the broadcast without first tapping
+"Stop Recording" left that recording stuck forever. `engine.stop()` closed
+the file's bytes, but only "Stop Recording" ever cleared the MediaStore
+row's `IS_PENDING` flag, so the file existed on disk but was invisible
+everywhere (Recordings screen, Files app, any music player) -- it looked
+like it was never saved. `stopBroadcast()` and `onDestroy()` now finalize
+an in-progress recording themselves before tearing down, using the same
+path "Stop Recording" already used.
