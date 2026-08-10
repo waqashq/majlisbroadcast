@@ -113,3 +113,13 @@ fixed-gain clamp so clipping protection still holds), and a static
 "Go Live" home-screen shortcut (long-press the app icon) that still goes
 through the same login gate, just auto-starts the broadcast once you're
 in.
+
+Phase 9b, at the user's request: the bottom nav is now shared by all four
+screens (Broadcast / Recordings / History / Settings), not just the
+Broadcast screen -- each of those Activities is `launchMode="singleTask"`
+so switching tabs reuses the same running instance instead of piling up
+copies. Recordings and Session History each got a delete action (per-row
+delete for a recording, a "Clear All" for session history), and the
+Broadcast screen's stray second header (the system ActionBar showing the
+app name above the custom green one) is gone -- it was only ever missing
+`supportActionBar?.hide()`, which every other screen already had.

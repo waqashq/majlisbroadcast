@@ -124,6 +124,11 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Every other screen already hides the system ActionBar in favor of
+        // its own custom header -- this one was missing it, so the system
+        // bar (showing the app name in the default light theme colors) was
+        // rendering as a second header stacked above the custom green one.
+        supportActionBar?.hide()
         pendingAutoGoLive = intent?.getBooleanExtra(EXTRA_AUTO_GO_LIVE, false) == true
         buildUi()
         DebugLog.log("App opened")
@@ -512,22 +517,10 @@ class MainActivity : AppCompatActivity() {
 
         val scrollView = ScrollView(this).apply { addView(scrollContent) }
 
-        // ---- Bottom nav ----
-        val nav = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            setBackgroundColor(UiTheme.STUDIO_CARD_BG)
-        }
-        val navBroadcast = buildNavTab(R.drawable.ic_radio, getString(R.string.nav_broadcast), active = true)
-        val navRecordings = buildNavTab(R.drawable.ic_mic, getString(R.string.nav_recordings), active = false)
-        navRecordings.setOnClickListener { startActivity(Intent(this, RecordingsActivity::class.java)) }
-        val navHistory = buildNavTab(R.drawable.ic_history, getString(R.string.nav_history), active = false)
-        navHistory.setOnClickListener { startActivity(Intent(this, HistoryActivity::class.java)) }
-        val navSettings = buildNavTab(R.drawable.ic_settings_sliders, getString(R.string.btn_settings), active = false)
-        navSettings.setOnClickListener { startActivity(Intent(this, SettingsActivity::class.java)) }
-        nav.addView(navBroadcast, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        nav.addView(navRecordings, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        nav.addView(navHistory, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        nav.addView(navSettings, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        // ---- Bottom nav -- shared across all four top-level screens, see
+        // BottomNav.kt (previously built inline here only, so it disappeared
+        // the moment you navigated to Recordings/History/Settings). ----
+        val nav = buildBottomNav(NavTab.BROADCAST)
 
         root.addView(header, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         root.addView(scrollView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
@@ -539,29 +532,6 @@ class MainActivity : AppCompatActivity() {
         updateRecordButtonStyle()
         updateMonitorButtonStyle()
         refreshStaticInfo()
-    }
-
-    private fun buildNavTab(iconRes: Int, label: String, active: Boolean): LinearLayout {
-        val tab = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            setPadding(0, 22, 0, 22)
-        }
-        val icon = ImageView(this).apply {
-            setImageResource(iconRes)
-            setColorFilter(if (active) UiTheme.STUDIO_BORDER_TEAL else UiTheme.STUDIO_TEXT_MUTED)
-            layoutParams = LinearLayout.LayoutParams(44, 44)
-        }
-        val text = TextView(this).apply {
-            text = label
-            textSize = 11f
-            setTypeface(typeface, if (active) Typeface.BOLD else Typeface.NORMAL)
-            setTextColor(if (active) UiTheme.STUDIO_BORDER_TEAL else UiTheme.STUDIO_TEXT_MUTED)
-            gravity = Gravity.CENTER
-        }
-        tab.addView(icon, LinearLayout.LayoutParams(44, 44).apply { topMargin = 0 })
-        tab.addView(text, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 6 })
-        return tab
     }
 
     private fun refreshStaticInfo() {

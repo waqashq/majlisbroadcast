@@ -21,6 +21,14 @@ class HistoryActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         supportActionBar?.hide()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Rebuild on every resume, not just first create -- launchMode=
+        // "singleTask" means returning to this tab reuses this instance, so
+        // this is the only reliable place to pick up sessions logged (or
+        // history cleared) while this screen was in the background.
         buildUi()
     }
 
@@ -38,6 +46,20 @@ class HistoryActivity : AppCompatActivity() {
         }
 
         val entries = SessionHistory.list(this)
+        if (entries.isNotEmpty()) {
+            val clearButton = studioPillButton(getString(R.string.btn_clear_all), 13f).apply {
+                setTextColor(UiTheme.STUDIO_STOP_RED)
+                background = UiTheme.outlinePillBackground(UiTheme.STUDIO_STOP_RED)
+            }
+            clearButton.setOnClickListener { confirmClearHistory() }
+            content.addView(
+                clearButton,
+                LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                    gravity = Gravity.END
+                    bottomMargin = 20
+                }
+            )
+        }
         if (entries.isEmpty()) {
             val empty = studioCard(28)
             empty.addView(studioCardBody().apply {
@@ -83,11 +105,25 @@ class HistoryActivity : AppCompatActivity() {
         }
 
         val scrollView = ScrollView(this).apply { addView(content) }
+        val nav = buildBottomNav(NavTab.HISTORY)
 
         root.addView(header, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         root.addView(scrollView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+        root.addView(nav, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
 
         setContentView(root)
+    }
+
+    private fun confirmClearHistory() {
+        androidx.appcompat.app.AlertDialog.Builder(this, androidx.appcompat.R.style.Theme_AppCompat_Dialog)
+            .setTitle(getString(R.string.history_clear_confirm_title))
+            .setMessage(getString(R.string.history_clear_confirm_message))
+            .setPositiveButton(getString(R.string.btn_clear_all)) { _, _ ->
+                SessionHistory.clear(this)
+                buildUi()
+            }
+            .setNegativeButton(getString(R.string.btn_cancel), null)
+            .show()
     }
 
     // header/card/cardBody/topMarginParams/formatDuration/formatMegabytes

@@ -147,10 +147,20 @@
     <string name="btn_share">Share</string>
     <string name="recordings_play_failed">Couldn\'t play this recording</string>
     <string name="recordings_share_chooser_title">Share recording</string>
+    <string name="recordings_delete_confirm_title">Delete Recording?</string>
+    <string name="recordings_delete_confirm_message">Delete \"%1$s\"? This can\'t be undone.</string>
+    <string name="recordings_deleted_toast">Recording deleted</string>
+    <string name="recordings_delete_failed">Couldn\'t delete this recording</string>
 
     <string name="history_title">Session History</string>
     <string name="history_empty">No sessions logged yet.</string>
     <string name="history_row_detail">Duration %1$s -- Peak %2$d listeners -- %3$s MB</string>
+    <string name="history_clear_confirm_title">Clear Session History?</string>
+    <string name="history_clear_confirm_message">This deletes your logged session history. This can\'t be undone.</string>
+
+    <string name="btn_delete">Delete</string>
+    <string name="btn_cancel">Cancel</string>
+    <string name="btn_clear_all">Clear All</string>
 
     <string name="shortcut_go_live_short">Go Live</string>
     <string name="shortcut_go_live_long">Go Live (Majlis Broadcast)</string>

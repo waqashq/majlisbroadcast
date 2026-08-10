@@ -147,10 +147,20 @@
     <string name="btn_share">شیئر کریں</string>
     <string name="recordings_play_failed">یہ ریکارڈنگ نہیں چلائی جا سکی</string>
     <string name="recordings_share_chooser_title">ریکارڈنگ شیئر کریں</string>
+    <string name="recordings_delete_confirm_title">ریکارڈنگ حذف کریں؟</string>
+    <string name="recordings_delete_confirm_message">\"%1$s\" حذف کریں؟ اسے واپس نہیں لایا جا سکتا۔</string>
+    <string name="recordings_deleted_toast">ریکارڈنگ حذف کر دی گئی</string>
+    <string name="recordings_delete_failed">یہ ریکارڈنگ حذف نہیں کی جا سکی</string>
 
     <string name="history_title">نشریات کی تاریخچہ</string>
     <string name="history_empty">ابھی تک کوئی نشریہ درج نہیں۔</string>
     <string name="history_row_detail">دورانیہ %1$s -- زیادہ سے زیادہ %2$d سامعین -- %3$s MB</string>
+    <string name="history_clear_confirm_title">نشریاتی تاریخچہ صاف کریں؟</string>
+    <string name="history_clear_confirm_message">اس سے آپ کا درج شدہ نشریاتی تاریخچہ حذف ہو جائے گا۔ اسے واپس نہیں لایا جا سکتا۔</string>
+
+    <string name="btn_delete">حذف کریں</string>
+    <string name="btn_cancel">منسوخ کریں</string>
+    <string name="btn_clear_all">سب صاف کریں</string>
 
     <string name="shortcut_go_live_short">لائیو جائیں</string>
     <string name="shortcut_go_live_long">لائیو جائیں (مجلس نشریہ)</string>

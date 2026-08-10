@@ -49,6 +49,11 @@ object SessionHistory {
         prefs.edit().putString(KEY_ENTRIES, trimmed.toString()).apply()
     }
 
+    /** Wipes the whole log -- used by the "Clear All" action in HistoryActivity. */
+    fun clear(context: Context) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().remove(KEY_ENTRIES).apply()
+    }
+
     /** Most recent first. */
     fun list(context: Context): List<Entry> {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)

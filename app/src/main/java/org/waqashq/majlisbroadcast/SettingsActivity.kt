@@ -278,9 +278,11 @@ class SettingsActivity : AppCompatActivity() {
         )
 
         val scrollView = ScrollView(this).apply { addView(content) }
+        val nav = buildBottomNav(NavTab.SETTINGS)
 
         root.addView(header, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         root.addView(scrollView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+        root.addView(nav, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
 
         setContentView(root)
     }

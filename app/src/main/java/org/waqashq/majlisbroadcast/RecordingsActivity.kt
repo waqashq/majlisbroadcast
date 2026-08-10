@@ -44,6 +44,15 @@ class RecordingsActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         supportActionBar?.hide()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Rebuild (not just refresh) on every resume, not only on first
+        // create -- launchMode="singleTask" means returning to this tab via
+        // the bottom nav reuses this same instance rather than recreating
+        // it, so this is the only reliable place to pick up recordings
+        // added/removed while this screen was in the background.
         buildUi()
     }
 
@@ -109,13 +118,22 @@ class RecordingsActivity : AppCompatActivity() {
                 val buttonRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
                 val playButton = studioPillButton(getString(R.string.btn_play), 13f)
                 val shareButton = studioPillButton(getString(R.string.btn_share), 13f)
+                val deleteButton = studioPillButton(getString(R.string.btn_delete), 13f).apply {
+                    setTextColor(UiTheme.STUDIO_STOP_RED)
+                    background = UiTheme.outlinePillBackground(UiTheme.STUDIO_STOP_RED)
+                }
                 playButton.setOnClickListener { togglePlay(rec, playButton) }
                 shareButton.setOnClickListener { shareRecording(rec) }
+                deleteButton.setOnClickListener { confirmDeleteRecording(rec) }
                 buttonRow.addView(
                     playButton,
                     LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = 12 }
                 )
-                buttonRow.addView(shareButton, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+                buttonRow.addView(
+                    shareButton,
+                    LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = 12 }
+                )
+                buttonRow.addView(deleteButton, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
                 row.addView(buttonRow, topMarginParams(20))
 
                 content.addView(
@@ -128,9 +146,11 @@ class RecordingsActivity : AppCompatActivity() {
         }
 
         val scrollView = ScrollView(this).apply { addView(content) }
+        val nav = buildBottomNav(NavTab.RECORDINGS)
 
         root.addView(header, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         root.addView(scrollView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+        root.addView(nav, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
 
         setContentView(root)
     }
@@ -223,6 +243,35 @@ class RecordingsActivity : AppCompatActivity() {
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
         startActivity(Intent.createChooser(intent, getString(R.string.recordings_share_chooser_title)))
+    }
+
+    private fun confirmDeleteRecording(rec: Recording) {
+        androidx.appcompat.app.AlertDialog.Builder(this, androidx.appcompat.R.style.Theme_AppCompat_Dialog)
+            .setTitle(getString(R.string.recordings_delete_confirm_title))
+            .setMessage(getString(R.string.recordings_delete_confirm_message, rec.displayName))
+            .setPositiveButton(getString(R.string.btn_delete)) { _, _ -> deleteRecording(rec) }
+            .setNegativeButton(getString(R.string.btn_cancel), null)
+            .show()
+    }
+
+    private fun deleteRecording(rec: Recording) {
+        if (playingUri == rec.uri) stopPlayback()
+        try {
+            val rows = contentResolver.delete(rec.uri, null, null)
+            if (rows > 0) {
+                Toast.makeText(this, getString(R.string.recordings_deleted_toast), Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, getString(R.string.recordings_delete_failed), Toast.LENGTH_SHORT).show()
+            }
+        } catch (t: Throwable) {
+            // On API 29+ this can throw a RecoverableSecurityException if the
+            // row wasn't originally inserted by this app -- shouldn't happen
+            // here since RecordingStorage always inserts as this app, but
+            // fail safely either way rather than crashing.
+            DebugLog.log("Recording delete failed: ${t.javaClass.simpleName}: ${t.message}")
+            Toast.makeText(this, getString(R.string.recordings_delete_failed), Toast.LENGTH_SHORT).show()
+        }
+        buildUi()
     }
 
     // header/card/cardBody/pillButton/topMarginParams/formatDuration/
