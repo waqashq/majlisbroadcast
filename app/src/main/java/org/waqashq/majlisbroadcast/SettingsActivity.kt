@@ -100,27 +100,7 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         // ---- Custom header (avoids theming the system ActionBar dark) ----
-        val header = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(32, 56, 32, 24)
-        }
-        val backArrow = TextView(this).apply {
-            text = "‹" // ‹
-            textSize = 28f
-            setTextColor(UiTheme.STUDIO_TEXT_PRIMARY)
-            setPadding(16, 8, 32, 8)
-            isClickable = true
-            setOnClickListener { finish() }
-        }
-        val headerTitle = TextView(this).apply {
-            text = getString(R.string.settings_title)
-            textSize = 20f
-            setTypeface(typeface, Typeface.BOLD)
-            setTextColor(UiTheme.STUDIO_TEXT_PRIMARY)
-        }
-        header.addView(backArrow)
-        header.addView(headerTitle)
+        val header = studioHeader(getString(R.string.settings_title)) { finish() }
 
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -128,8 +108,8 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         // ---- Language card ----
-        val languageCard = card()
-        languageCard.addView(cardTitle(getString(R.string.language_section_title)), topMarginParams(0))
+        val languageCard = studioCard(32)
+        languageCard.addView(studioCardTitle(getString(R.string.language_section_title)), topMarginParams(0))
         val languageRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
@@ -153,8 +133,8 @@ class SettingsActivity : AppCompatActivity() {
         languageCard.addView(languageRow, topMarginParams(20))
 
         // ---- Server card (Phase 8: editable, saved on-device) ----
-        val serverCard = card()
-        serverCard.addView(cardTitle(getString(R.string.server_panel_title)), topMarginParams(0))
+        val serverCard = studioCard(32)
+        serverCard.addView(studioCardTitle(getString(R.string.server_panel_title)), topMarginParams(0))
 
         hostField = fieldInput(getString(R.string.server_field_host_label)).apply {
             setText(AppSettings.host(this@SettingsActivity))
@@ -205,16 +185,16 @@ class SettingsActivity : AppCompatActivity() {
             LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 24 }
         )
 
-        val liveEditNotice = cardBody().apply {
+        val liveEditNotice = studioCardBody(centered = true).apply {
             text = getString(R.string.server_live_edit_notice)
             textSize = 11f
         }
         serverCard.addView(liveEditNotice, topMarginParams(12))
 
         // ---- App Lock card (Phase 8b) ----
-        val appLockCard = card()
-        appLockCard.addView(cardTitle(getString(R.string.app_lock_section_title)), topMarginParams(0))
-        val appLockSubtitle = cardBody().apply {
+        val appLockCard = studioCard(32)
+        appLockCard.addView(studioCardTitle(getString(R.string.app_lock_section_title)), topMarginParams(0))
+        val appLockSubtitle = studioCardBody(centered = true).apply {
             text = getString(R.string.app_lock_section_subtitle)
             textSize = 11f
         }
@@ -238,21 +218,21 @@ class SettingsActivity : AppCompatActivity() {
             LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 24 }
         )
 
-        val appLockResetNotice = cardBody().apply {
+        val appLockResetNotice = studioCardBody(centered = true).apply {
             text = getString(R.string.app_lock_reset_notice)
             textSize = 11f
         }
         appLockCard.addView(appLockResetNotice, topMarginParams(12))
 
         // ---- Old recordings migration card (Phase 8c) ----
-        val recordingsCard = card()
-        recordingsCard.addView(cardTitle(getString(R.string.recordings_migrate_section_title)), topMarginParams(0))
-        val recordingsSubtitle = cardBody().apply {
+        val recordingsCard = studioCard(32)
+        recordingsCard.addView(studioCardTitle(getString(R.string.recordings_migrate_section_title)), topMarginParams(0))
+        val recordingsSubtitle = studioCardBody(centered = true).apply {
             text = getString(R.string.recordings_migrate_section_subtitle)
             textSize = 11f
         }
         recordingsCard.addView(recordingsSubtitle, topMarginParams(8))
-        val moveRecordingsButton = pillButton(getString(R.string.btn_move_old_recordings))
+        val moveRecordingsButton = studioPillButton(getString(R.string.btn_move_old_recordings), 14f)
         moveRecordingsButton.setOnClickListener { moveOldRecordings(moveRecordingsButton) }
         recordingsCard.addView(
             moveRecordingsButton,
@@ -260,17 +240,17 @@ class SettingsActivity : AppCompatActivity() {
         )
 
         // ---- Diagnostics + battery card ----
-        val diagCard = card()
-        diagCard.addView(cardTitle(getString(R.string.diagnostics_title)), topMarginParams(0))
-        diagnosticsText = cardBody()
+        val diagCard = studioCard(32)
+        diagCard.addView(studioCardTitle(getString(R.string.diagnostics_title)), topMarginParams(0))
+        diagnosticsText = studioCardBody(centered = true)
         diagCard.addView(diagnosticsText, topMarginParams(12))
-        batteryStateLabel = cardBody()
+        batteryStateLabel = studioCardBody(centered = true)
         diagCard.addView(batteryStateLabel, topMarginParams(16))
 
         // ---- Debug log card ----
-        val debugCard = card()
-        debugCard.addView(cardTitle(getString(R.string.log_title)), topMarginParams(0))
-        val viewLogButton = pillButton(getString(R.string.btn_view_log))
+        val debugCard = studioCard(32)
+        debugCard.addView(studioCardTitle(getString(R.string.log_title)), topMarginParams(0))
+        val viewLogButton = studioPillButton(getString(R.string.btn_view_log), 14f)
         viewLogButton.setOnClickListener { showDebugLogDialog() }
         debugCard.addView(
             viewLogButton,
@@ -306,26 +286,11 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     // ================= Small studio-styled building blocks =================
-
-    private fun card(): LinearLayout = LinearLayout(this).apply {
-        orientation = LinearLayout.VERTICAL
-        background = UiTheme.studioCard()
-        setPadding(36, 32, 36, 32)
-    }
-
-    private fun cardTitle(text: String): TextView = TextView(this).apply {
-        this.text = text
-        textSize = 14f
-        setTypeface(typeface, Typeface.BOLD)
-        setTextColor(UiTheme.STUDIO_BORDER_TEAL)
-        gravity = Gravity.CENTER
-    }
-
-    private fun cardBody(): TextView = TextView(this).apply {
-        textSize = 13f
-        setTextColor(UiTheme.STUDIO_TEXT_MUTED)
-        gravity = Gravity.CENTER
-    }
+    // card()/cardTitle()/cardBody()/pillButton()/topMarginParams() moved to
+    // StudioUiKit.kt (shared with RecordingsActivity/HistoryActivity, which
+    // had their own near-identical copies) -- refactor only, no behavior
+    // change. Settings-only pieces (pillToggle, saveButton, fieldInput,
+    // dropdownRow, the pickers) stay here since nothing else uses them.
 
     private fun pillToggle(text: String): Button = Button(this).apply {
         this.text = text
@@ -335,17 +300,7 @@ class SettingsActivity : AppCompatActivity() {
         setPadding(0, 18, 0, 18)
     }
 
-    private fun pillButton(text: String): Button = Button(this).apply {
-        this.text = text
-        textSize = 14f
-        isAllCaps = false
-        setTypeface(typeface, Typeface.BOLD)
-        setTextColor(UiTheme.STUDIO_TEXT_PRIMARY)
-        background = UiTheme.outlinePillBackground(UiTheme.STUDIO_BORDER_TEAL)
-        setPadding(0, 24, 0, 24)
-    }
-
-    /** A solid-filled pill, distinct from the outline pillButton() above --
+    /** A solid-filled pill, distinct from the outline studioPillButton() in StudioUiKit.kt --
      * used for Save actions specifically, per request, so they read as a
      * clear "commit" action rather than blending in with outline buttons
      * like View Debug Log. */
@@ -358,9 +313,6 @@ class SettingsActivity : AppCompatActivity() {
         background = UiTheme.pillButtonBackground(UiTheme.STUDIO_BORDER_TEAL)
         setPadding(0, 24, 0, 24)
     }
-
-    private fun topMarginParams(margin: Int) =
-        LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = margin }
 
     private fun fieldInput(hintText: String): EditText = EditText(this).apply {
         hint = hintText

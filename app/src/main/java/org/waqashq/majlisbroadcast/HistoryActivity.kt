@@ -30,27 +30,7 @@ class HistoryActivity : AppCompatActivity() {
             setBackgroundColor(UiTheme.STUDIO_BG)
         }
 
-        val header = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(32, 56, 32, 24)
-        }
-        val backArrow = TextView(this).apply {
-            text = "‹"
-            textSize = 28f
-            setTextColor(UiTheme.STUDIO_TEXT_PRIMARY)
-            setPadding(16, 8, 32, 8)
-            isClickable = true
-            setOnClickListener { finish() }
-        }
-        val headerTitle = TextView(this).apply {
-            text = getString(R.string.history_title)
-            textSize = 20f
-            setTypeface(typeface, Typeface.BOLD)
-            setTextColor(UiTheme.STUDIO_TEXT_PRIMARY)
-        }
-        header.addView(backArrow)
-        header.addView(headerTitle)
+        val header = studioHeader(getString(R.string.history_title)) { finish() }
 
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -59,8 +39,8 @@ class HistoryActivity : AppCompatActivity() {
 
         val entries = SessionHistory.list(this)
         if (entries.isEmpty()) {
-            val empty = card()
-            empty.addView(cardBody().apply {
+            val empty = studioCard(28)
+            empty.addView(studioCardBody().apply {
                 text = getString(R.string.history_empty)
                 gravity = Gravity.CENTER
             })
@@ -71,7 +51,7 @@ class HistoryActivity : AppCompatActivity() {
         } else {
             val dateFormat = SimpleDateFormat("MMM d, yyyy -- h:mm a", Locale.getDefault())
             entries.forEachIndexed { index, entry ->
-                val row = card()
+                val row = studioCard(28)
                 row.addView(
                     TextView(this).apply {
                         text = dateFormat.format(Date(entry.startedAtMs))
@@ -81,7 +61,7 @@ class HistoryActivity : AppCompatActivity() {
                     }
                 )
                 row.addView(
-                    cardBody().apply {
+                    studioCardBody().apply {
                         text = getString(
                             R.string.history_row_detail,
                             formatDuration(entry.durationMs),
@@ -110,38 +90,8 @@ class HistoryActivity : AppCompatActivity() {
         setContentView(root)
     }
 
-    private fun formatDuration(totalMs: Long): String {
-        val totalSeconds = totalMs / 1000
-        val h = totalSeconds / 3600
-        val m = (totalSeconds % 3600) / 60
-        val s = totalSeconds % 60
-        return if (h > 0) {
-            String.format(Locale.US, "%d:%02d:%02d", h, m, s)
-        } else {
-            String.format(Locale.US, "%02d:%02d", m, s)
-        }
-    }
-
-    private fun formatMegabytes(bytes: Long): String {
-        val mb = bytes / 1024.0 / 1024.0
-        return String.format(Locale.US, "%.1f", mb)
-    }
-
-    // ================= Small studio-styled building blocks (mirrors SettingsActivity) =================
-
-    private fun card(): LinearLayout = LinearLayout(this).apply {
-        orientation = LinearLayout.VERTICAL
-        background = UiTheme.studioCard()
-        setPadding(36, 28, 36, 28)
-    }
-
-    private fun cardBody(): TextView = TextView(this).apply {
-        textSize = 13f
-        setTextColor(UiTheme.STUDIO_TEXT_MUTED)
-    }
-
-    private fun topMarginParams(marginPx: Int): LinearLayout.LayoutParams =
-        LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-            topMargin = marginPx
-        }
+    // header/card/cardBody/topMarginParams/formatDuration/formatMegabytes
+    // moved to StudioUiKit.kt (shared with SettingsActivity/
+    // RecordingsActivity, which had their own near-identical copies) --
+    // refactor only, no behavior change.
 }
