@@ -2,10 +2,10 @@ package org.waqashq.majlisbroadcast
 
 import android.content.Context
 import android.graphics.Canvas
-import android.graphics.Color
 import android.graphics.Paint
 import android.util.AttributeSet
 import android.view.View
+import androidx.core.graphics.ColorUtils
 
 /**
  * Phase 7+ cosmetic: a small rolling bar visualization driven by real mic
@@ -52,12 +52,6 @@ class WaveformView @JvmOverloads constructor(
     private var writeIndex = 0
 
     private val barPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val barColors = IntArray(BAR_COUNT) { i ->
-        // Fixed hue sweep across the strip (violet -> teal -> gold), same
-        // spirit as the reference mockup's colorful bars.
-        val hue = 260f - (200f * i / BAR_COUNT) // 260 (violet) down to ~60 (gold)
-        Color.HSVToColor(floatArrayOf(((hue % 360f) + 360f) % 360f, 0.65f, 1f))
-    }
 
     private val animTick = object : Runnable {
         override fun run() {
@@ -116,7 +110,10 @@ class WaveformView @JvmOverloads constructor(
             val level = displayLevels[(writeIndex + i) % BAR_COUNT]
             val barHeight = minHeight + (h - minHeight) * (level / 100f)
             val left = i * (barWidth + gap)
-            barPaint.color = barColors[i]
+            // Redesign: one flat accent color instead of a rainbow hue
+            // sweep, blended from muted (quiet) to the app's single accent
+            // (loud) per bar -- level feedback without decoration.
+            barPaint.color = ColorUtils.blendARGB(UiTheme.STUDIO_DIVIDER, UiTheme.PRIMARY_GREEN, (level / 100f).coerceIn(0f, 1f))
             canvas.drawRoundRect(
                 left, midY - barHeight / 2f, left + barWidth, midY + barHeight / 2f,
                 barWidth / 2f, barWidth / 2f, barPaint

@@ -4,7 +4,6 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
-import android.graphics.Color
 import android.graphics.Typeface
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
@@ -20,7 +19,6 @@ import android.provider.Settings
 import android.view.Gravity
 import android.view.View
 import android.widget.Button
-import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -63,6 +61,7 @@ class MainActivity : AppCompatActivity() {
     private val SHARE_MESSAGE_UR = "مجلس  آن  لائن  سننے  کے  لیے:"
     private val SHARE_URL = "https://waqashq.org/"
 
+    private lateinit var statusDot: View
     private lateinit var statusPill: TextView
     private lateinit var latencyIcon: ImageView
     private lateinit var latencyText: TextView
@@ -70,7 +69,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var statusSubtitle: TextView
     private lateinit var goLiveButton: Button
     private lateinit var recordButton: Button
-    private lateinit var micCircle: View
+    private lateinit var micIcon: ImageView
     private lateinit var waveform: WaveformView
     private lateinit var bitrateText: TextView
     private lateinit var micClippingText: TextView
@@ -177,16 +176,13 @@ class MainActivity : AppCompatActivity() {
             setBackgroundColor(UiTheme.STUDIO_BG)
         }
 
-        // ---- Top header bar -- full width, fixed (not part of the
-        // scrollable content), green background matching the logo's brand
-        // color, white text. Previously a large centered logo sat alone at
-        // the top of the scrollable content with a plain centered text
-        // header below it; per user request the logo is now a small badge
-        // sitting right beside the "Malfoozat e Akhtar" title in this one
-        // header row, both start-aligned -- Gravity.START (not an explicit
-        // left/right) so this reads left-aligned in English and mirrors to
-        // right-aligned in Urdu automatically via RTL layout direction,
-        // same as everywhere else in the app that doesn't hardcode a side.
+        // ---- Top header row -- fixed (not part of the scrollable
+        // content), no colored bar behind it (redesign: flat, blends into
+        // the screen background like every other header in the app). Small
+        // logo badge beside the "Malfoozat e Akhtar" title, start-aligned
+        // -- Gravity.START (not an explicit left/right) so this reads
+        // left-aligned in English and mirrors to right-aligned in Urdu
+        // automatically via RTL layout direction.
         val headerLogo = ImageView(this).apply {
             setImageResource(R.mipmap.ic_launcher_foreground)
             scaleType = ImageView.ScaleType.CENTER_CROP
@@ -205,13 +201,12 @@ class MainActivity : AppCompatActivity() {
             text = getString(R.string.app_name)
             textSize = 18f
             setTypeface(typeface, Typeface.BOLD)
-            setTextColor(Color.WHITE)
+            setTextColor(UiTheme.STUDIO_TEXT_PRIMARY)
         }
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.START or Gravity.CENTER_VERTICAL
-            setBackgroundColor(UiTheme.PRIMARY_GREEN)
-            setPadding(24, 32, 24, 24)
+            setPadding(24, 32, 24, 20)
             addView(headerLogo)
             addView(headerTitle)
         }
@@ -229,11 +224,20 @@ class MainActivity : AppCompatActivity() {
             setPadding(48, 40, 48, 36)
         }
 
+        statusDot = View(this).apply {
+            layoutParams = LinearLayout.LayoutParams(16, 16).apply { marginEnd = 14 }
+        }
         statusPill = TextView(this).apply {
             textSize = 13f
             setTypeface(typeface, Typeface.BOLD)
-            setPadding(40, 14, 40, 14)
-            gravity = Gravity.CENTER
+        }
+        val statusChip = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            background = UiTheme.studioPillBadge()
+            setPadding(28, 14, 28, 14)
+            addView(statusDot)
+            addView(statusPill)
         }
 
         val latencyRow = LinearLayout(this).apply {
@@ -268,7 +272,6 @@ class MainActivity : AppCompatActivity() {
         goLiveButton = Button(this).apply {
             textSize = 16f
             setTypeface(typeface, Typeface.BOLD)
-            setTextColor(Color.WHITE)
             isAllCaps = false
             setPadding(0, 34, 0, 34)
         }
@@ -282,43 +285,37 @@ class MainActivity : AppCompatActivity() {
         }
         recordButton.setOnClickListener { onRecordClicked() }
 
-        // ---- mic + waveform + bitrate row ----
+        // ---- mic + waveform + bitrate row -- a flat bordered inset strip
+        // (redesign) instead of a filled circle behind the mic icon. Tapping
+        // the mic icon still toggles mute while live, same as before, just
+        // restyled: a plain glyph whose tint reflects mute state instead of
+        // a colored circle behind it. ----
         val meterRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
+            background = UiTheme.insetBackground()
+            setPadding(24, 18, 24, 18)
         }
-        val micStack = FrameLayout(this).apply {
-            layoutParams = LinearLayout.LayoutParams(88, 88)
-        }
-        micCircle = View(this).apply {
-            background = UiTheme.studioMicCircle(UiTheme.STUDIO_TEXT_MUTED)
-        }
-        val micIcon = ImageView(this).apply {
+        micIcon = ImageView(this).apply {
             setImageResource(R.drawable.ic_mic)
-            setColorFilter(Color.WHITE)
+            layoutParams = LinearLayout.LayoutParams(36, 36).apply { marginEnd = 18 }
+            isClickable = true
+            setOnClickListener { onMicToggleClicked() }
         }
-        micStack.addView(micCircle, FrameLayout.LayoutParams(88, 88))
-        micStack.addView(
-            micIcon,
-            FrameLayout.LayoutParams(44, 44).apply { gravity = Gravity.CENTER }
-        )
-        micStack.isClickable = true
-        micStack.setOnClickListener { onMicToggleClicked() }
 
         waveform = WaveformView(this).apply {
-            layoutParams = LinearLayout.LayoutParams(0, 80, 1f).apply {
-                marginStart = 20
-                marginEnd = 20
+            layoutParams = LinearLayout.LayoutParams(0, 40, 1f).apply {
+                marginEnd = 16
             }
         }
 
         bitrateText = TextView(this).apply {
-            textSize = 12f
+            textSize = 11f
             setTextColor(UiTheme.STUDIO_TEXT_MUTED)
             text = currentBitrateLabel()
         }
 
-        meterRow.addView(micStack)
+        meterRow.addView(micIcon)
         meterRow.addView(waveform)
         meterRow.addView(bitrateText)
 
@@ -334,7 +331,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         listOf(
-            statusPill, latencyRow, elapsedText, statusSubtitle,
+            statusChip, latencyRow, elapsedText, statusSubtitle,
             goLiveButton, recordButton, meterRow, micClippingText
         ).forEach {
             card.addView(
@@ -528,6 +525,10 @@ class MainActivity : AppCompatActivity() {
     private fun updateGoLiveButtonStyle() {
         goLiveButton.text = getString(if (isLive) R.string.btn_stop_live else R.string.btn_go_live)
         goLiveButton.background = UiTheme.pillButtonBackground(if (isLive) UiTheme.STUDIO_STOP_RED else UiTheme.PRIMARY_GREEN)
+        // Dark text on the flat accent fill (idle "Go live"), light text on
+        // the flat red fill (live "Stop") -- same on-fill pairing already
+        // used by the Share button elsewhere on this screen.
+        goLiveButton.setTextColor(if (isLive) UiTheme.STUDIO_TEXT_PRIMARY else UiTheme.STUDIO_BG)
     }
 
     private fun updateRecordButtonStyle() {
@@ -541,16 +542,19 @@ class MainActivity : AppCompatActivity() {
 
     /** Central place mapping engine state (+ mute) to the pill badge, subtitle, and latency row. */
     private fun applyStatusStyle(state: BroadcastEngine.State, callMuted: Boolean, manualMuted: Boolean) {
-        val (pillText, pillBg, pillFg) = when (state) {
-            BroadcastEngine.State.CONNECTING -> Triple(getString(R.string.status_pill_connecting), UiTheme.STUDIO_CARD_BG, UiTheme.STUDIO_AMBER)
-            BroadcastEngine.State.LIVE -> Triple(getString(R.string.status_pill_on_air), UiTheme.STUDIO_ON_AIR_BG, UiTheme.STUDIO_ON_AIR_GREEN)
-            BroadcastEngine.State.RECONNECTING -> Triple(getString(R.string.status_pill_reconnecting), UiTheme.STUDIO_CARD_BG, UiTheme.STUDIO_AMBER)
-            BroadcastEngine.State.ERROR -> Triple(getString(R.string.status_pill_error), UiTheme.STUDIO_CARD_BG, UiTheme.STUDIO_STOP_RED)
-            BroadcastEngine.State.STOPPED, BroadcastEngine.State.IDLE -> Triple(getString(R.string.status_pill_offline), UiTheme.STUDIO_CARD_BG, UiTheme.STUDIO_TEXT_MUTED)
+        // Redesign: the chip itself is a fixed neutral bordered background
+        // (set once, at construction) -- only the small dot and the label
+        // text change color per state now, instead of a solid colored fill.
+        val (pillText, pillFg) = when (state) {
+            BroadcastEngine.State.CONNECTING -> getString(R.string.status_pill_connecting) to UiTheme.STUDIO_AMBER
+            BroadcastEngine.State.LIVE -> getString(R.string.status_pill_on_air) to UiTheme.STUDIO_ON_AIR_GREEN
+            BroadcastEngine.State.RECONNECTING -> getString(R.string.status_pill_reconnecting) to UiTheme.STUDIO_AMBER
+            BroadcastEngine.State.ERROR -> getString(R.string.status_pill_error) to UiTheme.STUDIO_STOP_RED
+            BroadcastEngine.State.STOPPED, BroadcastEngine.State.IDLE -> getString(R.string.status_pill_offline) to UiTheme.STUDIO_TEXT_MUTED
         }
         statusPill.text = pillText
-        statusPill.background = UiTheme.studioPillBadge(pillBg)
         statusPill.setTextColor(pillFg)
+        statusDot.background = UiTheme.studioMicCircle(pillFg)
 
         val isLiveState = state == BroadcastEngine.State.LIVE
         statusSubtitle.text = if (isLiveState && callMuted) {
@@ -572,7 +576,7 @@ class MainActivity : AppCompatActivity() {
             isLiveState -> UiTheme.STUDIO_ON_AIR_GREEN
             else -> UiTheme.STUDIO_TEXT_MUTED
         }
-        micCircle.background = UiTheme.studioMicCircle(micColor)
+        micIcon.setColorFilter(micColor)
         latencyIcon.setColorFilter(if (isLiveState) UiTheme.STUDIO_ON_AIR_GREEN else UiTheme.STUDIO_TEXT_MUTED)
         latencyText.setTextColor(if (isLiveState) UiTheme.STUDIO_ON_AIR_GREEN else UiTheme.STUDIO_TEXT_MUTED)
     }

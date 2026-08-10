@@ -153,3 +153,20 @@ the Broadcast screen is gone -- it's now a small badge sitting beside the
 "Malfoozat e Akhtar" title in the header row itself, start-aligned (reads
 left-aligned in English, mirrors to right-aligned in Urdu automatically via
 RTL layout direction, same as the rest of the app).
+
+Phase 10, at the user's request: a full visual redesign ("Noor"), replacing
+the old green + teal + amber mix with one flat emerald accent used
+consistently everywhere (Go Live, active nav tab, section titles, slider
+tint, on-air indicator). No gradients or glow -- flat bordered cards
+(thin hairline border instead of a thick colored outline), a neutral
+bordered status chip with a small colored dot instead of a loud solid-fill
+pill, a redesigned mic level meter (flat bordered inset strip, plain mic
+glyph, single-accent bar meter instead of a rainbow hue sweep), and a
+floating rounded bottom nav bar with a filled chip behind the active tab.
+The Broadcast screen's colored header bar and Splash screen's colored
+header bar are both gone, replaced with the same flat no-chrome look used
+everywhere else. Solid accent-filled buttons (Go Live, Login, Save) now
+consistently pair with dark text for better contrast on the lighter
+emerald fill. Recordings/History/Settings inherit the new look entirely
+through the shared UiTheme/StudioUiKit palette -- no changes needed in
+those screens themselves.

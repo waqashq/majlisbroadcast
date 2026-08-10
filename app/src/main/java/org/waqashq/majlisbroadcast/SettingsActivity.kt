@@ -296,7 +296,9 @@ class SettingsActivity : AppCompatActivity() {
         textSize = 14f
         isAllCaps = false
         setTypeface(typeface, Typeface.BOLD)
-        setTextColor(android.graphics.Color.WHITE)
+        // Dark text on the flat accent fill -- same on-fill pairing used
+        // for Go Live / Share on the Broadcast screen.
+        setTextColor(UiTheme.STUDIO_BG)
         background = UiTheme.pillButtonBackground(UiTheme.STUDIO_BORDER_TEAL)
         setPadding(0, 24, 0, 24)
     }
@@ -430,6 +432,7 @@ class SettingsActivity : AppCompatActivity() {
             } else {
                 UiTheme.outlinePillBackground(UiTheme.STUDIO_TEXT_MUTED)
             }
+            btn.setTextColor(if (active) UiTheme.STUDIO_BG else UiTheme.STUDIO_TEXT_PRIMARY)
         }
     }
 

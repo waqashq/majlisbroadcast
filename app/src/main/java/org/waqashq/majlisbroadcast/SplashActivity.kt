@@ -1,7 +1,6 @@
 package org.waqashq.majlisbroadcast
 
 import android.content.Intent
-import android.graphics.Color
 import android.graphics.Outline
 import android.graphics.Typeface
 import android.os.Bundle
@@ -10,7 +9,6 @@ import android.os.Looper
 import android.view.Gravity
 import android.view.View
 import android.view.ViewOutlineProvider
-import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -27,10 +25,9 @@ import androidx.appcompat.app.AppCompatActivity
  * window background before this layout inflates, so there's no white/system
  * flash ahead of the dark background.
  *
- * Layout: a full-width green header bar (app name, same brand green as the
- * logo and MainActivity's own header) pinned at the top, with the logo
- * centered in the remaining space below -- replaces an earlier floating
- * "pill badge" title that didn't read well on its own.
+ * Layout: logo and app name centered on the plain dark background --
+ * redesign dropped the old full-width colored header bar in favor of the
+ * same flat, no-chrome look used everywhere else in the app now.
  */
 class SplashActivity : AppCompatActivity() {
 
@@ -51,21 +48,9 @@ class SplashActivity : AppCompatActivity() {
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
             setBackgroundColor(UiTheme.STUDIO_BG)
         }
-
-        val header = TextView(this).apply {
-            text = getString(R.string.app_name)
-            textSize = 18f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.WHITE)
-            gravity = Gravity.CENTER
-            setBackgroundColor(UiTheme.PRIMARY_GREEN)
-            setPadding(24, 32, 24, 24)
-        }
-        root.addView(header, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-
-        val logoContainer = FrameLayout(this)
 
         val logoSize = (140 * resources.displayMetrics.density).toInt()
         val logo = ImageView(this).apply {
@@ -78,12 +63,22 @@ class SplashActivity : AppCompatActivity() {
                 }
             }
         }
-        logoContainer.addView(
-            logo,
-            FrameLayout.LayoutParams(logoSize, logoSize, Gravity.CENTER)
+        root.addView(logo, LinearLayout.LayoutParams(logoSize, logoSize))
+
+        val title = TextView(this).apply {
+            text = getString(R.string.app_name)
+            textSize = 18f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(UiTheme.STUDIO_TEXT_PRIMARY)
+            gravity = Gravity.CENTER
+        }
+        root.addView(
+            title,
+            LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                topMargin = (20 * resources.displayMetrics.density).toInt()
+            }
         )
 
-        root.addView(logoContainer, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         setContentView(root)
 
         handler.postDelayed(goToMain, SPLASH_DELAY_MS)

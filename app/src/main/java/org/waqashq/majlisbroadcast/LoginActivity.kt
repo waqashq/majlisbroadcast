@@ -141,7 +141,9 @@ class LoginActivity : AppCompatActivity() {
             text = getString(if (isCreateMode) R.string.btn_create_login else R.string.btn_login)
             textSize = 16f
             setTypeface(typeface, Typeface.BOLD)
-            setTextColor(android.graphics.Color.WHITE)
+            // Dark text on the flat accent fill -- same on-fill pairing used
+            // for Go Live / Share on the Broadcast screen.
+            setTextColor(UiTheme.STUDIO_BG)
             isAllCaps = false
             background = UiTheme.pillButtonBackground(UiTheme.PRIMARY_GREEN)
             setPadding(0, 30, 0, 30)
