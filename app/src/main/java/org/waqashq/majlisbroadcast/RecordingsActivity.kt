@@ -205,8 +205,13 @@ class RecordingsActivity : AppCompatActivity() {
             return
         }
         stopPlayback()
+        // Held outside the try so the catch block can release it on any
+        // failure (setDataSource/prepare throwing on a corrupted or
+        // unsupported file) -- without this, a failed MediaPlayer was never
+        // released, leaking its native resources on every failed attempt.
+        var mp: MediaPlayer? = null
         try {
-            val mp = MediaPlayer()
+            mp = MediaPlayer()
             mp.setDataSource(this, rec.uri)
             mp.setOnCompletionListener { stopPlayback() }
             mp.prepare()
@@ -218,6 +223,7 @@ class RecordingsActivity : AppCompatActivity() {
         } catch (t: Throwable) {
             DebugLog.log("Recording playback failed: ${t.javaClass.simpleName}: ${t.message}")
             Toast.makeText(this, getString(R.string.recordings_play_failed), Toast.LENGTH_SHORT).show()
+            try { mp?.release() } catch (_: Throwable) {}
         }
     }
 

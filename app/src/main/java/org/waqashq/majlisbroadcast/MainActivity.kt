@@ -694,12 +694,20 @@ class MainActivity : AppCompatActivity() {
             // battery before going live rather than mid-session. Purely a
             // heads-up; the user can still choose to continue.
             if (isBatteryLow()) {
-                AlertDialog.Builder(this, androidx.appcompat.R.style.Theme_AppCompat_Dialog)
+                // Disable Go Live while this is up so a rapid double-tap
+                // (or a tap while the dialog is still animating in) can't
+                // stack a second copy of the same dialog on top -- the
+                // dismiss listener re-enables it however the dialog closes
+                // (either button, back press, or tap-outside-to-cancel).
+                goLiveButton.isEnabled = false
+                val dialog = AlertDialog.Builder(this, androidx.appcompat.R.style.Theme_AppCompat_Dialog)
                     .setTitle(getString(R.string.battery_low_title))
                     .setMessage(getString(R.string.battery_low_message, currentBatteryPercent()))
                     .setPositiveButton(getString(R.string.battery_low_continue)) { _, _ -> startBroadcastNow() }
                     .setNegativeButton(getString(R.string.battery_low_cancel), null)
-                    .show()
+                    .create()
+                dialog.setOnDismissListener { goLiveButton.isEnabled = true }
+                dialog.show()
                 return
             }
             startBroadcastNow()
