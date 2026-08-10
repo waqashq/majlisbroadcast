@@ -106,11 +106,6 @@
     <string name="btn_stop_recording">Stop Recording</string>
     <string name="recording_saved_toast">Saved to %2$s: %1$s</string>
     <string name="recordings_migrated_toast">Found %1$d old recording(s) and moved them to the Music folder</string>
-    <string name="btn_move_old_recordings">Move Old Recordings to Music Folder</string>
-    <string name="recordings_migrate_section_title">Old Recordings</string>
-    <string name="recordings_migrate_section_subtitle">Earlier versions of this app saved recordings to a hidden, app-only folder. Tap below to move any leftover recordings into the public Music folder so you can find and play them.</string>
-    <string name="recordings_migrate_none_found">No old recordings found -- nothing to move.</string>
-    <string name="recordings_migrate_result">Moved %1$d recording(s) to the Music folder.</string>
 
     <string name="nav_broadcast">Broadcast</string>
 

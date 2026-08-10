@@ -106,11 +106,6 @@
     <string name="btn_stop_recording">ریکارڈنگ روکیں</string>
     <string name="recording_saved_toast">%2$s میں محفوظ ہوگئی: %1$s</string>
     <string name="recordings_migrated_toast">%1$d پرانی ریکارڈنگ ملیں اور میوزک فولڈر میں منتقل کر دی گئیں</string>
-    <string name="btn_move_old_recordings">پرانی ریکارڈنگز میوزک فولڈر میں منتقل کریں</string>
-    <string name="recordings_migrate_section_title">پرانی ریکارڈنگز</string>
-    <string name="recordings_migrate_section_subtitle">ایپ کے پرانے ورژن میں ریکارڈنگز ایک پوشیدہ، ایپ کے مخصوص فولڈر میں محفوظ ہوتی تھیں۔ نیچے بٹن دبائیں تاکہ باقی رہ جانے والی ریکارڈنگز عوامی میوزک فولڈر میں منتقل ہو جائیں اور آپ انہیں تلاش کر کے سن سکیں۔</string>
-    <string name="recordings_migrate_none_found">کوئی پرانی ریکارڈنگ نہیں ملی -- منتقل کرنے کے لیے کچھ نہیں۔</string>
-    <string name="recordings_migrate_result">%1$d ریکارڈنگ(ز) میوزک فولڈر میں منتقل کر دی گئیں۔</string>
 
     <string name="nav_broadcast">نشریات</string>
 

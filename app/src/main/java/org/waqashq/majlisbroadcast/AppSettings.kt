@@ -55,6 +55,28 @@ object AppSettings {
     }
 
     private fun buildPrefs(context: Context): SharedPreferences {
+        return try {
+            createEncryptedPrefs(context)
+        } catch (t: Throwable) {
+            // Seen in the wild on at least one OEM (aggressive background-
+            // process/memory management killing the app mid-write): the
+            // Tink keyset EncryptedSharedPreferences stores inside this same
+            // file gets truncated/corrupted, and every future read throws
+            // (InvalidProtocolBufferException) before this object is even
+            // usable -- crashing the app on every single launch, with the
+            // only user-facing recovery being to manually clear all app
+            // data. Self-heal instead: the corrupted keyset can't be
+            // un-corrupted, so wipe just this one file and start over. This
+            // does mean server settings/app-lock/FX levels stored here are
+            // lost and need re-entering once, but that's unavoidable and far
+            // better than a permanent crash loop.
+            DebugLog.log("Encrypted settings unreadable, resetting: ${t.javaClass.simpleName}: ${t.message}")
+            context.deleteSharedPreferences(PREFS_NAME)
+            createEncryptedPrefs(context)
+        }
+    }
+
+    private fun createEncryptedPrefs(context: Context): SharedPreferences {
         val masterKeyAlias = MasterKeys.getOrCreate(MasterKeys.AES256_GCM_SPEC)
         return EncryptedSharedPreferences.create(
             PREFS_NAME,

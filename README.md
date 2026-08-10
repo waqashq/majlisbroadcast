@@ -123,3 +123,14 @@ delete for a recording, a "Clear All" for session history), and the
 Broadcast screen's stray second header (the system ActionBar showing the
 app name above the custom green one) is gone -- it was only ever missing
 `supportActionBar?.hide()`, which every other screen already had.
+
+Phase 9c: fixed a real crash-on-launch seen on at least one OEM device --
+`AppSettings`'s encrypted settings store (Tink/AndroidX Security) could end
+up with a corrupted keyset (aggressive background-process/memory management
+killing the app mid-write), which made `EncryptedSharedPreferences.create()`
+throw on every single launch with no recovery except manually clearing all
+app data. It now self-heals: on that failure it wipes just the one
+corrupted file and rebuilds a fresh encrypted store, at the cost of needing
+to re-enter server settings/app-lock once. Also removed the "Move Old
+Recordings to Music Folder" manual button from Settings, at the user's
+request -- the automatic migration on launch (Phase 8c) still runs.
