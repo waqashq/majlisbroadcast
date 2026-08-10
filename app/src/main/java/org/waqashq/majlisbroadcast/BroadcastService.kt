@@ -49,10 +49,8 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
         private const val ACTION_STOP_RECORDING = "org.waqashq.majlisbroadcast.action.STOP_RECORDING"
         private const val ACTION_MUTE_MIC = "org.waqashq.majlisbroadcast.action.MUTE_MIC"
         private const val ACTION_UNMUTE_MIC = "org.waqashq.majlisbroadcast.action.UNMUTE_MIC"
-        private const val ACTION_SET_SELF_MONITOR = "org.waqashq.majlisbroadcast.action.SET_SELF_MONITOR"
         private const val ACTION_SET_BASS_LEVEL = "org.waqashq.majlisbroadcast.action.SET_BASS_LEVEL"
         private const val ACTION_SET_ECHO_LEVEL = "org.waqashq.majlisbroadcast.action.SET_ECHO_LEVEL"
-        private const val EXTRA_ENABLED = "enabled"
         private const val EXTRA_LEVEL = "level"
 
         // Phase 7: how often to poll AzuraCast's now-playing API while
@@ -117,10 +115,6 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
         /** Cumulative bytes uploaded this session, mirrored from the engine every poll tick (Phase 9). */
         @Volatile var bytesUploadedTotal: Long = 0
             private set
-        /** Whether self-monitor playback (hear your own mic) is currently on (Phase 9, off by default each session). */
-        @Volatile var selfMonitorEnabled: Boolean = false
-            private set
-
         fun start(context: Context) {
             val intent = Intent(context, BroadcastService::class.java)
             context.startForegroundService(intent)
@@ -145,15 +139,6 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
         fun setMicMuted(context: Context, muted: Boolean) {
             val intent = Intent(context, BroadcastService::class.java).apply {
                 action = if (muted) ACTION_MUTE_MIC else ACTION_UNMUTE_MIC
-            }
-            context.startService(intent)
-        }
-
-        /** No-op if not currently live -- there's no engine to monitor when idle. */
-        fun setSelfMonitor(context: Context, enabled: Boolean) {
-            val intent = Intent(context, BroadcastService::class.java).apply {
-                action = ACTION_SET_SELF_MONITOR
-                putExtra(EXTRA_ENABLED, enabled)
             }
             context.startService(intent)
         }
@@ -226,12 +211,6 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
             engine?.setManuallyMuted(false)
             return START_NOT_STICKY
         }
-        if (intent?.action == ACTION_SET_SELF_MONITOR) {
-            val enabled = intent.getBooleanExtra(EXTRA_ENABLED, false)
-            engine?.setSelfMonitor(enabled)
-            selfMonitorEnabled = enabled
-            return START_NOT_STICKY
-        }
         if (intent?.action == ACTION_SET_BASS_LEVEL) {
             val level = intent.getIntExtra(EXTRA_LEVEL, 0)
             engine?.setBassLevel(level)
@@ -260,7 +239,6 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
 
             peakListenerCount = 0
             bytesUploadedTotal = 0
-            selfMonitorEnabled = false
             sessionStartWallClock = System.currentTimeMillis()
 
             engine = BroadcastEngine(
@@ -299,7 +277,6 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
         recordSessionHistoryIfMeaningful()
         isRecording = false
         manuallyMuted = false
-        selfMonitorEnabled = false
         state = BroadcastEngine.State.STOPPED
         sessionStartRealtime = 0
         stopSelf()
@@ -375,7 +352,6 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
         recordSessionHistoryIfMeaningful()
         isRecording = false
         manuallyMuted = false
-        selfMonitorEnabled = false
         sessionStartRealtime = 0
         super.onDestroy()
     }

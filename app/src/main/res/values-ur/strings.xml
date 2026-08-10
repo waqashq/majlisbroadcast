@@ -121,10 +121,6 @@
     <string name="fx_echo_label">بازگشت</string>
     <string name="fx_percent_format">%1$d%%</string>
 
-    <string name="btn_monitor_off">مانیٹر: بند</string>
-    <string name="btn_monitor_on">مانیٹر: چالو</string>
-    <string name="monitor_headphone_warning">فیڈبیک سے بچنے کے لیے ہیڈفون استعمال کریں</string>
-
     <string name="data_conn_wifi">وائی فائی</string>
     <string name="data_conn_mobile">موبائل ڈیٹا</string>
     <string name="data_usage_format">%1$.1f MB استعمال ہوا (%2$s)</string>

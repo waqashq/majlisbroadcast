@@ -4,7 +4,6 @@ import android.media.AudioDeviceInfo
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioRecord
-import android.media.AudioTrack
 import android.media.MediaCodec
 import android.media.MediaCodecInfo
 import android.media.MediaFormat
@@ -190,17 +189,6 @@ class BroadcastEngine(
     private val echoBuf = ShortArray((ECHO_DELAY_MS.toLong() * sampleRate / 1000).toInt().coerceAtLeast(1))
     private var echoWriteIndex = 0
 
-    // ---- Self-monitor (Phase 9): optional live playback of the same
-    // post-effects audio being broadcast, so the broadcaster can hear what
-    // listeners hear. Off by default; routed via USAGE_VOICE_COMMUNICATION
-    // so it plays through the earpiece (quiet, directional) rather than
-    // the loud bottom speaker when no headphones are connected -- reduces
-    // (but doesn't eliminate) feedback-howl risk without headphones. The
-    // AudioTrack itself is created/destroyed only by the capture thread in
-    // reaction to this flag, so it's never touched from two threads at once.
-    @Volatile private var selfMonitorEnabled = false
-    private var monitorTrack: AudioTrack? = null
-
     init {
         recomputeBassCoefficients()
     }
@@ -218,12 +206,6 @@ class BroadcastEngine(
     fun setEchoLevel(level: Int) {
         echoLevel = level.coerceIn(0, 100)
         echoFeedback = (echoLevel / 100.0) * ECHO_MAX_FEEDBACK
-    }
-
-    /** Toggles local playback of your own mic (via the earpiece unless headphones are connected). */
-    fun setSelfMonitor(enabled: Boolean) {
-        selfMonitorEnabled = enabled
-        DebugLog.log(if (enabled) "Self-monitor enabled" else "Self-monitor disabled")
     }
 
     private fun recomputeBassCoefficients() {
@@ -267,43 +249,6 @@ class BroadcastEngine(
         echoBuf[echoWriteIndex] = clamped.toInt().toShort()
         echoWriteIndex = (echoWriteIndex + 1) % echoBuf.size
         return mixed
-    }
-
-    private fun createMonitorTrack(): AudioTrack? {
-        return try {
-            val minBuf = AudioTrack.getMinBufferSize(
-                sampleRate, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT
-            )
-            if (minBuf <= 0) return null
-            val attrs = android.media.AudioAttributes.Builder()
-                .setUsage(android.media.AudioAttributes.USAGE_VOICE_COMMUNICATION)
-                .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH)
-                .build()
-            val format = AudioFormat.Builder()
-                .setSampleRate(sampleRate)
-                .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
-                .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-                .build()
-            val track = AudioTrack.Builder()
-                .setAudioAttributes(attrs)
-                .setAudioFormat(format)
-                .setBufferSizeInBytes(minBuf * 2)
-                .setTransferMode(AudioTrack.MODE_STREAM)
-                .build()
-            track.play()
-            DebugLog.log("Self-monitor AudioTrack started")
-            track
-        } catch (t: Throwable) {
-            DebugLog.log("Self-monitor failed to start: ${t.javaClass.simpleName}: ${t.message}")
-            null
-        }
-    }
-
-    private fun releaseMonitorTrack() {
-        val track = monitorTrack ?: return
-        monitorTrack = null
-        try { track.stop() } catch (_: Throwable) {}
-        try { track.release() } catch (_: Throwable) {}
     }
 
     fun start() {
@@ -503,23 +448,6 @@ class BroadcastEngine(
                         if (read > 0) {
                             val (level, clipped) = applyEffectsAndMeasure(pcmBuf, read)
                             reportLevel(level, clipped)
-                            if (selfMonitorEnabled) {
-                                if (monitorTrack == null) monitorTrack = createMonitorTrack()
-                                // WRITE_NON_BLOCKING is essential here: this
-                                // write sits in the capture thread's hot
-                                // loop, and a stalled/blocked monitor
-                                // AudioTrack must never be able to stall
-                                // capture (and so the actual broadcast) --
-                                // worst case a non-blocking write just drops
-                                // some monitor audio, which is a self-
-                                // monitoring nicety, not the broadcast
-                                // itself.
-                                try {
-                                    monitorTrack?.write(pcmBuf, 0, read, AudioTrack.WRITE_NON_BLOCKING)
-                                } catch (_: Throwable) {}
-                            } else if (monitorTrack != null) {
-                                releaseMonitorTrack()
-                            }
                         }
                     }
                     val inputBuffer = codec.getInputBuffer(inIndex)
@@ -560,7 +488,6 @@ class BroadcastEngine(
             audioRecord?.release()
             try { codec?.stop() } catch (_: Throwable) {}
             codec?.release()
-            releaseMonitorTrack()
         }
     }
 

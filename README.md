@@ -105,14 +105,13 @@ Phase 9, at the user's request: an in-app Recordings screen (play/share
 without leaving the app or hunting through the Music folder), a Session
 History screen (date, duration, peak listeners, data used for each past
 broadcast, logged locally), a data-used + Wi-Fi/mobile-data readout and a
-low-battery confirmation prompt before going live, a self-monitor toggle
-(hear your own mic through the earpiece, off by default -- use
-headphones), optional Bass Boost / Echo voice effects with 0-100 knobs
-(off by default, applied to the raw mic signal before the existing
-fixed-gain clamp so clipping protection still holds), and a static
-"Go Live" home-screen shortcut (long-press the app icon) that still goes
-through the same login gate, just auto-starts the broadcast once you're
-in.
+low-battery confirmation prompt before going live, optional Bass Boost /
+Echo voice effects with 0-100 knobs (off by default, applied to the raw
+mic signal before the existing fixed-gain clamp so clipping protection
+still holds), and a static "Go Live" home-screen shortcut (long-press the
+app icon) that still goes through the same login gate, just auto-starts
+the broadcast once you're in. (A self-monitor toggle was also added in
+this phase and later removed at the user's request -- see Phase 9d.)
 
 Phase 9b, at the user's request: the bottom nav is now shared by all four
 screens (Broadcast / Recordings / History / Settings), not just the
@@ -134,3 +133,8 @@ corrupted file and rebuilds a fresh encrypted store, at the cost of needing
 to re-enter server settings/app-lock once. Also removed the "Move Old
 Recordings to Music Folder" manual button from Settings, at the user's
 request -- the automatic migration on launch (Phase 8c) still runs.
+
+Phase 9d, at the user's request: removed the self-monitor toggle (earpiece
+playback of your own live mic) entirely -- the button, its BroadcastEngine
+AudioTrack plumbing, and the BroadcastService action that toggled it are
+all gone. Bass Boost / Echo and everything else from Phase 9 are unaffected.

@@ -77,17 +77,12 @@ class MainActivity : AppCompatActivity() {
     private lateinit var listenerCountText: TextView
     private lateinit var shareButton: LinearLayout
     private lateinit var dataUsageText: TextView
-    private lateinit var monitorButton: Button
     private lateinit var bassSeekBar: SeekBar
     private lateinit var bassValueText: TextView
     private lateinit var echoSeekBar: SeekBar
     private lateinit var echoValueText: TextView
 
     private var isLive = false
-    // Phase 9: self-monitor is always OFF at the start of every broadcast
-    // (safety default -- see BroadcastEngine), tracked here just to drive
-    // this button's on/off styling.
-    private var selfMonitorOn = false
     // Phase 9: set from the "Go Live" shortcut's intent extra, consumed
     // (set back to false) the first time maybeAutoGoLive() actually fires.
     private var pendingAutoGoLive = false
@@ -153,9 +148,7 @@ class MainActivity : AppCompatActivity() {
             BroadcastService.state == BroadcastEngine.State.RECONNECTING
         ) {
             isLive = true
-            selfMonitorOn = BroadcastService.selfMonitorEnabled
             updateGoLiveButtonStyle()
-            updateMonitorButtonStyle()
             uiHandler.post(livePoller)
         }
 
@@ -283,17 +276,6 @@ class MainActivity : AppCompatActivity() {
         }
         recordButton.setOnClickListener { onRecordClicked() }
 
-        // Phase 9: self-monitor toggle -- hear your own mic (via earpiece
-        // unless headphones are connected) to confirm audio quality without
-        // a second device. Off by default every session.
-        monitorButton = Button(this).apply {
-            textSize = 14f
-            setTypeface(typeface, Typeface.BOLD)
-            isAllCaps = false
-            setPadding(0, 22, 0, 22)
-        }
-        monitorButton.setOnClickListener { onMonitorClicked() }
-
         // ---- mic + waveform + bitrate row ----
         val meterRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -347,7 +329,7 @@ class MainActivity : AppCompatActivity() {
 
         listOf(
             statusPill, latencyRow, elapsedText, statusSubtitle,
-            goLiveButton, recordButton, monitorButton, meterRow, micClippingText
+            goLiveButton, recordButton, meterRow, micClippingText
         ).forEach {
             card.addView(
                 it,
@@ -362,7 +344,6 @@ class MainActivity : AppCompatActivity() {
         // and Start Recording -> the mic/waveform row.
         goLiveButton.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 44 }
         recordButton.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 28 }
-        monitorButton.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 20 }
         meterRow.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 40 }
         micClippingText.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 20 }
 
@@ -530,7 +511,6 @@ class MainActivity : AppCompatActivity() {
 
         updateGoLiveButtonStyle()
         updateRecordButtonStyle()
-        updateMonitorButtonStyle()
         refreshStaticInfo()
     }
 
@@ -685,10 +665,8 @@ class MainActivity : AppCompatActivity() {
             DebugLog.log("Stop tapped")
             BroadcastService.stop(this)
             isLive = false
-            selfMonitorOn = false
             updateGoLiveButtonStyle()
             updateRecordButtonStyle()
-            updateMonitorButtonStyle()
             applyStatusStyle(BroadcastEngine.State.STOPPED, callMuted = false, manualMuted = false)
             elapsedText.text = ""
             latencyText.text = getString(R.string.latency_unavailable)
@@ -714,7 +692,6 @@ class MainActivity : AppCompatActivity() {
         isLive = true
         updateGoLiveButtonStyle()
         updateRecordButtonStyle()
-        updateMonitorButtonStyle()
         applyStatusStyle(BroadcastEngine.State.CONNECTING, callMuted = false, manualMuted = false)
         uiHandler.post(livePoller)
         awaitStateAndShowDialog(
@@ -749,26 +726,6 @@ class MainActivity : AppCompatActivity() {
         val network = cm.activeNetwork ?: return false
         val caps = cm.getNetworkCapabilities(network) ?: return false
         return caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)
-    }
-
-    // ================= Self-monitor (Phase 9) =================
-
-    private fun onMonitorClicked() {
-        if (!isLive) return
-        selfMonitorOn = !selfMonitorOn
-        BroadcastService.setSelfMonitor(this, selfMonitorOn)
-        updateMonitorButtonStyle()
-        if (selfMonitorOn) {
-            Toast.makeText(this, getString(R.string.monitor_headphone_warning), Toast.LENGTH_LONG).show()
-        }
-    }
-
-    private fun updateMonitorButtonStyle() {
-        monitorButton.text = getString(if (selfMonitorOn) R.string.btn_monitor_on else R.string.btn_monitor_off)
-        monitorButton.background = UiTheme.outlinePillBackground(if (selfMonitorOn) UiTheme.STUDIO_AMBER else UiTheme.STUDIO_TEXT_MUTED)
-        monitorButton.setTextColor(if (selfMonitorOn) UiTheme.STUDIO_AMBER else UiTheme.STUDIO_TEXT_PRIMARY)
-        monitorButton.isEnabled = isLive
-        monitorButton.alpha = if (isLive) 1f else 0.5f
     }
 
     /**
@@ -867,10 +824,8 @@ class MainActivity : AppCompatActivity() {
             BroadcastEngine.State.STOPPED, BroadcastEngine.State.IDLE -> {
                 if (isLive) {
                     isLive = false
-                    selfMonitorOn = false
                     updateGoLiveButtonStyle()
                     updateRecordButtonStyle()
-                    updateMonitorButtonStyle()
                     elapsedText.text = ""
                     latencyText.text = getString(R.string.latency_unavailable)
                     listenerCountText.text = getString(R.string.listener_count_unavailable)

@@ -121,10 +121,6 @@
     <string name="fx_echo_label">Echo</string>
     <string name="fx_percent_format">%1$d%%</string>
 
-    <string name="btn_monitor_off">Monitor: Off</string>
-    <string name="btn_monitor_on">Monitor: On</string>
-    <string name="monitor_headphone_warning">Use headphones to avoid feedback/howling</string>
-
     <string name="data_conn_wifi">Wi-Fi</string>
     <string name="data_conn_mobile">Mobile Data</string>
     <string name="data_usage_format">%1$.1f MB used (%2$s)</string>
