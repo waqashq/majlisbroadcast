@@ -537,6 +537,9 @@ class BroadcastEngine(
                     return record
                 }
                 record.release()
+            } catch (_: SecurityException) {
+                // RECORD_AUDIO not granted -- every source will fail the same way.
+                return null
             } catch (_: Throwable) {
                 // try next source
             }

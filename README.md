@@ -170,3 +170,11 @@ consistently pair with dark text for better contrast on the lighter
 emerald fill. Recordings/History/Settings inherit the new look entirely
 through the shared UiTheme/StudioUiKit palette -- no changes needed in
 those screens themselves.
+
+Phase 10b: first change verified by an actual Gradle build + Android lint
+rather than manual review alone. Lint's two errors (MissingPermission on
+`AudioRecord` creation in BroadcastEngine and AacFileRecorder) were
+already safely caught by a generic `catch (Throwable)`; both now catch
+`SecurityException` explicitly and give up immediately instead of
+pointlessly retrying the fallback mic source, which lint recognizes as
+handled. `lintDebug` now passes (warnings remain, none functional).
