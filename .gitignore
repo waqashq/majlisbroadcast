@@ -26,6 +26,10 @@ secrets.*.properties
 *.jks
 *.keystore
 keystore.properties
+# Release keystore saved without a .jks extension
+/majlisbroadcast-release
+# Android Studio's "Generate Signed APK" wizard writes here
+/app/release/
 
 # --- IDE / OS ---
 .idea/
