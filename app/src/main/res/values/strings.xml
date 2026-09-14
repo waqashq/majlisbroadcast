@@ -90,9 +90,12 @@
     <string name="status_pill_reconnecting">RECONNECTING</string>
     <string name="status_pill_error">ERROR</string>
     <!-- Phase 11: website (waqashq.org) live light, separate from the app's own ON AIR chip -->
-    <string name="website_status_live">WEBSITE: LIVE</string>
-    <string name="website_status_offline">WEBSITE: OFFLINE</string>
-    <string name="website_status_unknown">WEBSITE: — —</string>
+    <string name="website_status_live">LIVE</string>
+    <string name="website_status_offline">OFFLINE</string>
+    <string name="website_status_unknown">— —</string>
+    <!-- Phase 11b: screen-reader names for the icon-only indicator chips -->
+    <string name="cd_app_status">App broadcast status</string>
+    <string name="cd_website_status">Website live status</string>
 
     <string name="status_subtitle_offline">Ready to broadcast</string>
     <string name="status_subtitle_connecting">Connecting to server…</string>

@@ -72,12 +72,6 @@ object UiTheme {
         setStroke(2, STUDIO_DIVIDER)
     }
 
-    /** Small solid circle -- used for the status dot and (tinted per state) anywhere else a plain colored dot/circle is needed. */
-    fun studioMicCircle(color: Int): GradientDrawable = GradientDrawable().apply {
-        shape = GradientDrawable.OVAL
-        setColor(color)
-    }
-
     /** Sunken bordered strip background, darker than a card -- used behind the mic level meter. */
     fun insetBackground(): GradientDrawable = GradientDrawable().apply {
         shape = GradientDrawable.RECTANGLE

@@ -14,7 +14,7 @@ import androidx.core.graphics.ColorUtils
 /**
  * Phase 11: a small "3D" indicator lamp -- a glossy domed bulb in a dark
  * bezel, with a soft glow around it while lit. Used on the Broadcast
- * screen for the website live/offline light.
+ * screen for both the app's own ON AIR light and the website live light.
  *
  * This is a deliberate, contained exception to the flat "Noor" look (see
  * UiTheme's doc -- no gradients or glow anywhere else): the user asked for
@@ -33,7 +33,8 @@ import androidx.core.graphics.ColorUtils
  */
 class StatusLightView(context: Context) : View(context) {
 
-    enum class Lamp { LIVE, OFFLINE, UNKNOWN }
+    /** LIVE green, WAITING amber (connecting/reconnecting), OFFLINE red, UNKNOWN unlit grey. */
+    enum class Lamp { LIVE, WAITING, OFFLINE, UNKNOWN }
 
     var lamp: Lamp = Lamp.UNKNOWN
         set(value) {
@@ -43,6 +44,14 @@ class StatusLightView(context: Context) : View(context) {
                 invalidate()
             }
         }
+
+    init {
+        // Rendered on the CPU instead of the GPU: the GPU path left stray
+        // colored specks where the glow gradient is nearly transparent
+        // (seen on-device). Cheap here -- the View is tiny and only redraws
+        // when the lamp state actually changes.
+        setLayerType(LAYER_TYPE_SOFTWARE, null)
+    }
 
     private val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val bezelPaint = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -65,14 +74,16 @@ class StatusLightView(context: Context) : View(context) {
         if (width == 0 || height == 0) return
         cx = width / 2f
         cy = height / 2f
-        outerR = minOf(width, height) / 2f
+        // Glow fades out slightly inside the View's edge so it never looks cut off.
+        outerR = minOf(width, height) / 2f * 0.94f
         // The glow needs room outside the bulb, so the bezel only uses the
         // inner ~62% of the View's radius.
-        bezelR = outerR * 0.62f
+        bezelR = minOf(width, height) / 2f * 0.62f
         domeR = bezelR * 0.80f
 
         val base = when (lamp) {
             Lamp.LIVE -> LIVE_COLOR
+            Lamp.WAITING -> UiTheme.STUDIO_AMBER
             Lamp.OFFLINE -> UiTheme.STUDIO_STOP_RED
             Lamp.UNKNOWN -> UNLIT_COLOR
         }
@@ -119,7 +130,11 @@ class StatusLightView(context: Context) : View(context) {
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         if (domeR == 0f) return
-        if (glowPaint.shader != null) canvas.drawCircle(cx, cy, outerR, glowPaint)
+        // Glow is painted as a plain rect covering the whole View, not a
+        // circle: the radial gradient already fades to transparent (and
+        // CLAMPs to transparent beyond outerR), so there's no shape edge
+        // for anti-aliasing to leave stray colored specks on.
+        if (glowPaint.shader != null) canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), glowPaint)
         canvas.drawCircle(cx, cy, bezelR, bezelPaint)
         canvas.drawCircle(cx, cy, domeR, domePaint)
         canvas.drawOval(shineOval, shinePaint)

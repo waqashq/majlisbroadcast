@@ -61,7 +61,7 @@ class MainActivity : AppCompatActivity() {
     private val SHARE_MESSAGE_UR = "مجلس  آن  لائن  سننے  کے  لیے:"
     private val SHARE_URL = "https://waqashq.org/"
 
-    private lateinit var statusDot: View
+    private lateinit var appLight: StatusLightView
     private lateinit var statusPill: TextView
     private lateinit var latencyIcon: ImageView
     private lateinit var latencyText: TextView
@@ -248,50 +248,30 @@ class MainActivity : AppCompatActivity() {
             setPadding(48, 40, 48, 36)
         }
 
-        statusDot = View(this).apply {
-            layoutParams = LinearLayout.LayoutParams(16, 16).apply { marginEnd = 14 }
-        }
-        statusPill = TextView(this).apply {
-            textSize = 13f
-            setTypeface(typeface, Typeface.BOLD)
-        }
-        val statusChip = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            background = UiTheme.studioPillBadge()
-            setPadding(28, 14, 28, 14)
-            addView(statusDot)
-            addView(statusPill)
-        }
+        // ---- Two matching indicator chips, each [lamp][icon][state]:
+        //  - phone icon: the app's own connection (ON AIR / CONNECTING / ...)
+        //  - globe icon: what listeners on waqashq.org actually see
+        //    (AzuraCast's live.is_live, Phase 11)
+        // The two can legitimately disagree, which is the point of showing
+        // both. Stacked rather than side by side so longer labels
+        // (RECONNECTING, Urdu) never overflow a narrow card. ----
+        appLight = StatusLightView(this)
+        statusPill = indicatorText()
+        val statusChip = indicatorChip(appLight, R.drawable.ic_phone, R.string.cd_app_status, statusPill)
 
-        // ---- Phase 11: website live light -- a second chip, same neutral
-        // style as the ON AIR chip above it, but reflecting what listeners on
-        // waqashq.org actually see (AzuraCast's live.is_live) rather than the
-        // app's own connection state. Stacked below rather than side by side
-        // so longer labels (RECONNECTING, Urdu) never overflow a narrow card.
-        val density = resources.displayMetrics.density
-        websiteLight = StatusLightView(this).apply {
-            val size = (26 * density).toInt()
-            layoutParams = LinearLayout.LayoutParams(size, size).apply {
-                marginEnd = (5 * density).toInt()
-            }
-        }
-        websiteStatusText = TextView(this).apply {
-            textSize = 13f
-            setTypeface(typeface, Typeface.BOLD)
-        }
-        val websiteChip = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            background = UiTheme.studioPillBadge()
-            // Smaller start padding than the ON AIR chip: the lamp's glow is
-            // a transparent halo around the bulb, which already acts as
-            // padding. Relative (start/end) so it mirrors correctly in Urdu.
-            setPaddingRelative(10, 4, 28, 4)
-            addView(websiteLight)
-            addView(websiteStatusText)
-        }
+        websiteLight = StatusLightView(this)
+        websiteStatusText = indicatorText()
+        val websiteChip = indicatorChip(websiteLight, R.drawable.ic_globe, R.string.cd_website_status, websiteStatusText)
         applyWebsiteStatus(StatusLightView.Lamp.UNKNOWN)
+
+        // Wrap-content column whose chips are MATCH_PARENT: LinearLayout
+        // then sizes both chips to the wider one, so the lamps and icons
+        // line up in a neat column instead of two ragged centered pills.
+        val indicators = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(statusChip, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+            addView(websiteChip, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 14 })
+        }
 
         val latencyRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -384,7 +364,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         listOf(
-            statusChip, websiteChip, latencyRow, elapsedText, statusSubtitle,
+            indicators, latencyRow, elapsedText, statusSubtitle,
             goLiveButton, recordButton, meterRow, micClippingText
         ).forEach {
             card.addView(
@@ -402,8 +382,6 @@ class MainActivity : AppCompatActivity() {
         recordButton.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 28 }
         meterRow.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 40 }
         micClippingText.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 20 }
-        websiteChip.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 14 }
-
         scrollContent.addView(card, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
 
         // ---- Voice effects card (Phase 9): optional Bass Boost / Echo,
@@ -604,11 +582,18 @@ class MainActivity : AppCompatActivity() {
             BroadcastEngine.State.LIVE -> getString(R.string.status_pill_on_air) to UiTheme.STUDIO_ON_AIR_GREEN
             BroadcastEngine.State.RECONNECTING -> getString(R.string.status_pill_reconnecting) to UiTheme.STUDIO_AMBER
             BroadcastEngine.State.ERROR -> getString(R.string.status_pill_error) to UiTheme.STUDIO_STOP_RED
-            BroadcastEngine.State.STOPPED, BroadcastEngine.State.IDLE -> getString(R.string.status_pill_offline) to UiTheme.STUDIO_TEXT_MUTED
+            // Red (was muted grey) so the label agrees with the red lamp, same as the website chip.
+            BroadcastEngine.State.STOPPED, BroadcastEngine.State.IDLE -> getString(R.string.status_pill_offline) to UiTheme.STUDIO_STOP_RED
         }
         statusPill.text = pillText
         statusPill.setTextColor(pillFg)
-        statusDot.background = UiTheme.studioMicCircle(pillFg)
+        // Offline (idle/stopped) lights red rather than unlit, matching the
+        // website lamp's red/green scheme; amber while (re)connecting.
+        appLight.lamp = when (state) {
+            BroadcastEngine.State.LIVE -> StatusLightView.Lamp.LIVE
+            BroadcastEngine.State.CONNECTING, BroadcastEngine.State.RECONNECTING -> StatusLightView.Lamp.WAITING
+            BroadcastEngine.State.ERROR, BroadcastEngine.State.STOPPED, BroadcastEngine.State.IDLE -> StatusLightView.Lamp.OFFLINE
+        }
 
         val isLiveState = state == BroadcastEngine.State.LIVE
         statusSubtitle.text = if (isLiveState && callMuted) {
@@ -676,10 +661,49 @@ class MainActivity : AppCompatActivity() {
         val (label, color) = when (lamp) {
             StatusLightView.Lamp.LIVE -> getString(R.string.website_status_live) to UiTheme.STUDIO_ON_AIR_GREEN
             StatusLightView.Lamp.OFFLINE -> getString(R.string.website_status_offline) to UiTheme.STUDIO_STOP_RED
-            StatusLightView.Lamp.UNKNOWN -> getString(R.string.website_status_unknown) to UiTheme.STUDIO_TEXT_MUTED
+            // WAITING is never produced for the website -- it's live or it isn't.
+            StatusLightView.Lamp.WAITING, StatusLightView.Lamp.UNKNOWN -> getString(R.string.website_status_unknown) to UiTheme.STUDIO_TEXT_MUTED
         }
         websiteStatusText.text = label
         websiteStatusText.setTextColor(color)
+    }
+
+    private fun indicatorText() = TextView(this).apply {
+        textSize = 13f
+        setTypeface(typeface, Typeface.BOLD)
+    }
+
+    /**
+     * One indicator chip: [3D lamp][icon][state text] in the neutral bordered
+     * pill. The icon replaces a text label ("WEBSITE:") -- its meaning is
+     * still exposed to screen readers via [contentDescRes] on the chip.
+     */
+    private fun indicatorChip(light: StatusLightView, iconRes: Int, contentDescRes: Int, text: TextView): LinearLayout {
+        val density = resources.displayMetrics.density
+        light.layoutParams = LinearLayout.LayoutParams((26 * density).toInt(), (26 * density).toInt())
+        val icon = ImageView(this).apply {
+            setImageResource(iconRes)
+            setColorFilter(UiTheme.STUDIO_TEXT_SECONDARY)
+            val size = (16 * density).toInt()
+            layoutParams = LinearLayout.LayoutParams(size, size).apply {
+                marginStart = (4 * density).toInt()
+                marginEnd = (8 * density).toInt()
+            }
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.START or Gravity.CENTER_VERTICAL
+            background = UiTheme.studioPillBadge()
+            // Small start padding: the lamp's glow is a transparent halo
+            // around the bulb, which already acts as padding. Relative
+            // (start/end) so it mirrors correctly in Urdu.
+            setPaddingRelative(10, 4, 32, 4)
+            contentDescription = getString(contentDescRes)
+            addView(light)
+            addView(icon)
+            addView(text)
+        }
     }
 
     /** True if the active network has been validated by Android as actually reaching the internet. */

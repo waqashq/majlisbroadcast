@@ -195,3 +195,21 @@ glossy bulb with bezel and glow -- a deliberate, self-contained exception
 to Noor's no-gradients rule, which still applies everywhere else.
 Verified on an Android 14 emulator against the live API (English + Urdu
 RTL).
+
+Phase 11b, at the user's request: both status indicators now match. The
+old flat ON AIR dot is replaced by the same 3D lamp as the website light,
+and each chip is [lamp][icon][state] -- a phone icon for the app's own
+connection, a globe icon for waqashq.org -- instead of a "WEBSITE:" text
+prefix (the chips still carry "App broadcast status" / "Website live
+status" for screen readers). App lamp: green on air, amber while
+connecting/reconnecting, red when offline or on error; the app's OFFLINE
+label is now red too (was grey) so it agrees with its lamp. Both chips are
+sized to the wider one so the lamps and icons line up in a column. The
+lamp is now drawn on a CPU (software) layer -- the GPU path left faint
+stray specks in the nearly-transparent edge of the glow. UiTheme's
+now-unused `studioMicCircle` helper was removed.
+
+Emulator note: the `salah_test` AVD's host process repeatedly crashed
+(exit 139) mid-way through reading the host's DNS configuration whenever
+the app made network calls; starting it with
+`-dns-server 8.8.8.8,1.1.1.1` avoids that path and it ran stably.
