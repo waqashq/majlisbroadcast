@@ -80,6 +80,21 @@ class MainActivity : AppCompatActivity() {
     private lateinit var bassValueText: TextView
     private lateinit var echoSeekBar: SeekBar
     private lateinit var echoValueText: TextView
+    private lateinit var websiteLight: StatusLightView
+    private lateinit var websiteStatusText: TextView
+
+    // Phase 11: website live light polling -- runs only while this screen
+    // is in the foreground (onResume..onPause), whether or not the app
+    // itself is broadcasting. 15s matches waqashq.org's own player script.
+    private val websitePollIntervalMs = 15_000L
+    private var websitePolling = false
+    @Volatile private var websiteFetchInFlight = false
+    private val websitePoller = object : Runnable {
+        override fun run() {
+            fetchWebsiteStatus()
+            if (websitePolling) uiHandler.postDelayed(this, websitePollIntervalMs)
+        }
+    }
 
     private var isLive = false
     // Phase 9: set from the "Go Live" shortcut's intent extra, consumed
@@ -166,6 +181,15 @@ class MainActivity : AppCompatActivity() {
         if (!isLive) {
             bitrateText.text = currentBitrateLabel()
         }
+        websitePolling = true
+        uiHandler.removeCallbacks(websitePoller)
+        uiHandler.post(websitePoller)
+    }
+
+    override fun onPause() {
+        super.onPause()
+        websitePolling = false
+        uiHandler.removeCallbacks(websitePoller)
     }
 
     private fun currentBitrateLabel(): String = getString(R.string.bitrate_format, AppSettings.bitRateBps(this) / 1000)
@@ -239,6 +263,35 @@ class MainActivity : AppCompatActivity() {
             addView(statusDot)
             addView(statusPill)
         }
+
+        // ---- Phase 11: website live light -- a second chip, same neutral
+        // style as the ON AIR chip above it, but reflecting what listeners on
+        // waqashq.org actually see (AzuraCast's live.is_live) rather than the
+        // app's own connection state. Stacked below rather than side by side
+        // so longer labels (RECONNECTING, Urdu) never overflow a narrow card.
+        val density = resources.displayMetrics.density
+        websiteLight = StatusLightView(this).apply {
+            val size = (26 * density).toInt()
+            layoutParams = LinearLayout.LayoutParams(size, size).apply {
+                marginEnd = (5 * density).toInt()
+            }
+        }
+        websiteStatusText = TextView(this).apply {
+            textSize = 13f
+            setTypeface(typeface, Typeface.BOLD)
+        }
+        val websiteChip = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            background = UiTheme.studioPillBadge()
+            // Smaller start padding than the ON AIR chip: the lamp's glow is
+            // a transparent halo around the bulb, which already acts as
+            // padding. Relative (start/end) so it mirrors correctly in Urdu.
+            setPaddingRelative(10, 4, 28, 4)
+            addView(websiteLight)
+            addView(websiteStatusText)
+        }
+        applyWebsiteStatus(StatusLightView.Lamp.UNKNOWN)
 
         val latencyRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -331,7 +384,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         listOf(
-            statusChip, latencyRow, elapsedText, statusSubtitle,
+            statusChip, websiteChip, latencyRow, elapsedText, statusSubtitle,
             goLiveButton, recordButton, meterRow, micClippingText
         ).forEach {
             card.addView(
@@ -349,6 +402,7 @@ class MainActivity : AppCompatActivity() {
         recordButton.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 28 }
         meterRow.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 40 }
         micClippingText.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 20 }
+        websiteChip.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 14 }
 
         scrollContent.addView(card, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
 
@@ -579,6 +633,60 @@ class MainActivity : AppCompatActivity() {
         micIcon.setColorFilter(micColor)
         latencyIcon.setColorFilter(if (isLiveState) UiTheme.STUDIO_ON_AIR_GREEN else UiTheme.STUDIO_TEXT_MUTED)
         latencyText.setTextColor(if (isLiveState) UiTheme.STUDIO_ON_AIR_GREEN else UiTheme.STUDIO_TEXT_MUTED)
+    }
+
+    // ================= Website live light (Phase 11) =================
+
+    /**
+     * One background fetch of AzuraCast's now-playing API, same endpoint
+     * and same `live.is_live` rule as waqashq.org's player. Runs on a plain
+     * throwaway thread (network is not allowed on the main thread) and
+     * skips a tick if the previous fetch is still waiting on a slow network,
+     * so requests never pile up.
+     *
+     * If the fetch fails, what the website shows depends on *why*: when this
+     * phone has working internet, the server itself is unreachable, and the
+     * website's own fetch would fail too -- it shows Offline, so we do too.
+     * When the phone has no internet, we genuinely can't tell, so the lamp
+     * goes unlit/unknown rather than falsely claiming the site is offline.
+     */
+    private fun fetchWebsiteStatus() {
+        if (websiteFetchInFlight) return
+        websiteFetchInFlight = true
+        val apiBase = AppSettings.apiBaseUrl(this)
+        Thread({
+            val info = ListenerCountFetcher.fetch(
+                apiBase,
+                BuildConfig.AZURACAST_STATION_SHORTCODE.takeIf { it.isNotBlank() }
+            )
+            val lamp = when {
+                info != null -> if (info.isLive) StatusLightView.Lamp.LIVE else StatusLightView.Lamp.OFFLINE
+                hasWorkingInternet() -> StatusLightView.Lamp.OFFLINE
+                else -> StatusLightView.Lamp.UNKNOWN
+            }
+            websiteFetchInFlight = false
+            uiHandler.post {
+                if (!isFinishing && !isDestroyed) applyWebsiteStatus(lamp)
+            }
+        }, "MainActivity-websiteStatus").start()
+    }
+
+    private fun applyWebsiteStatus(lamp: StatusLightView.Lamp) {
+        websiteLight.lamp = lamp
+        val (label, color) = when (lamp) {
+            StatusLightView.Lamp.LIVE -> getString(R.string.website_status_live) to UiTheme.STUDIO_ON_AIR_GREEN
+            StatusLightView.Lamp.OFFLINE -> getString(R.string.website_status_offline) to UiTheme.STUDIO_STOP_RED
+            StatusLightView.Lamp.UNKNOWN -> getString(R.string.website_status_unknown) to UiTheme.STUDIO_TEXT_MUTED
+        }
+        websiteStatusText.text = label
+        websiteStatusText.setTextColor(color)
+    }
+
+    /** True if the active network has been validated by Android as actually reaching the internet. */
+    private fun hasWorkingInternet(): Boolean {
+        val cm = getSystemService(CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return false
+        val caps = cm.getNetworkCapabilities(cm.activeNetwork ?: return false) ?: return false
+        return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
     }
 
     // ================= First-run permission chain (section 7) =================

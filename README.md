@@ -178,3 +178,20 @@ already safely caught by a generic `catch (Throwable)`; both now catch
 `SecurityException` explicitly and give up immediately instead of
 pointlessly retrying the fallback mic source, which lint recognizes as
 handled. `lintDebug` now passes (warnings remain, none functional).
+
+Phase 11, at the user's request: a website live/offline light on the
+Broadcast screen, in its own chip directly under the existing ON AIR chip.
+ON AIR is the app's own connection state; the new light shows what
+listeners on waqashq.org actually see, so the two can disagree (e.g. the
+app is connected but AzuraCast hasn't registered the live source yet). It
+uses the exact rule waqashq.org's own player script uses -- AzuraCast's
+`/api/nowplaying/{shortcode}` -> `live.is_live`, refreshed every 15s -- and
+polls only while the Broadcast screen is in the foreground, whether or not
+the app is broadcasting. Green = live, red = offline, unlit grey = unknown
+(only when the phone itself has no working internet; if the phone is
+online but the API is unreachable, the website would show Offline too, so
+the light shows red). The lamp (StatusLightView) is a small custom-drawn
+glossy bulb with bezel and glow -- a deliberate, self-contained exception
+to Noor's no-gradients rule, which still applies everywhere else.
+Verified on an Android 14 emulator against the live API (English + Urdu
+RTL).

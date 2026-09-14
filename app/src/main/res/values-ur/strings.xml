@@ -89,6 +89,10 @@
     <string name="status_pill_on_air">براہ راست نشر</string>
     <string name="status_pill_reconnecting">دوبارہ رابطہ</string>
     <string name="status_pill_error">خرابی</string>
+    <!-- Phase 11: website (waqashq.org) live light, separate from the app's own ON AIR chip -->
+    <string name="website_status_live">ویب سائٹ: براہ راست</string>
+    <string name="website_status_offline">ویب سائٹ: آف لائن</string>
+    <string name="website_status_unknown">ویب سائٹ: — —</string>
 
     <string name="status_subtitle_offline">نشر کرنے کے لیے تیار</string>
     <string name="status_subtitle_connecting">سرور سے رابطہ ہو رہا ہے…</string>

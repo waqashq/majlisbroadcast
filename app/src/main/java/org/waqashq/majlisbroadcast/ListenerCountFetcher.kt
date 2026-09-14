@@ -33,7 +33,14 @@ object ListenerCountFetcher {
 
     @Volatile private var failureAlreadyLogged = false
 
-    data class NowPlayingInfo(val listenerCount: Int, val publicPlayerUrl: String?)
+    /**
+     * [isLive] is AzuraCast's `live.is_live` -- true only while a live
+     * source (this app, or anyone else) is connected to the station. This
+     * is the exact field waqashq.org's own player script checks to decide
+     * between "Live Now" and "Offline", so the Broadcast screen's website
+     * light (Phase 11) reads it too rather than inventing its own rule.
+     */
+    data class NowPlayingInfo(val listenerCount: Int, val publicPlayerUrl: String?, val isLive: Boolean)
 
     /** Returns current now-playing info, or null on any failure (network, parsing, etc). */
     fun fetch(apiBaseUrl: String, stationShortcode: String? = null): NowPlayingInfo? {
@@ -77,7 +84,8 @@ object ListenerCountFetcher {
     private fun parseEntry(entry: JSONObject): NowPlayingInfo {
         val listeners = entry.getJSONObject("listeners").getInt("total")
         val playerUrl = entry.optJSONObject("station")?.optString("public_player_url")?.takeIf { it.isNotBlank() }
-        return NowPlayingInfo(listeners, playerUrl)
+        val isLive = entry.optJSONObject("live")?.optBoolean("is_live", false) ?: false
+        return NowPlayingInfo(listeners, playerUrl, isLive)
     }
 
     private fun tryFetch(fullUrl: String): NowPlayingInfo? {
