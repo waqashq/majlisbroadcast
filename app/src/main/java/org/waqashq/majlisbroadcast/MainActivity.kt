@@ -264,13 +264,16 @@ class MainActivity : AppCompatActivity() {
         val websiteChip = indicatorChip(websiteLight, R.drawable.ic_globe, R.string.cd_website_status, websiteStatusText)
         applyWebsiteStatus(StatusLightView.Lamp.UNKNOWN)
 
-        // Wrap-content column whose chips are MATCH_PARENT: LinearLayout
-        // then sizes both chips to the wider one, so the lamps and icons
-        // line up in a neat column instead of two ragged centered pills.
+        // Phase 11d: side by side (was stacked), each chip taking an equal
+        // half of the card's width so the pair reads as one row and the two
+        // lamps sit at the same height. Equal halves rather than
+        // wrap-content because the app chip's label changes width with
+        // state (OFFLINE -> CONNECTING -> RECONNECTING), which would
+        // otherwise shift the website chip sideways on every transition.
         val indicators = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            addView(statusChip, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-            addView(websiteChip, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 14 })
+            orientation = LinearLayout.HORIZONTAL
+            addView(statusChip, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            addView(websiteChip, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = 14 })
         }
 
         val latencyRow = LinearLayout(this).apply {
@@ -378,6 +381,8 @@ class MainActivity : AppCompatActivity() {
         // width. Generous top margins per user feedback: more breathing
         // room between elapsed time -> Go Live, Stop -> Start Recording,
         // and Start Recording -> the mic/waveform row.
+        // Full card width so the two indicator chips inside can split it in half.
+        indicators.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 20 }
         goLiveButton.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 44 }
         recordButton.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 28 }
         meterRow.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 40 }
@@ -678,8 +683,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun indicatorText() = TextView(this).apply {
-        textSize = 13f
+        // 12sp, single line: two chips share one row now, and the longest
+        // label (RECONNECTING) has to fit half a narrow phone's card width.
+        textSize = 12f
         setTypeface(typeface, Typeface.BOLD)
+        isSingleLine = true
+        ellipsize = android.text.TextUtils.TruncateAt.END
     }
 
     /**
@@ -693,10 +702,10 @@ class MainActivity : AppCompatActivity() {
         val icon = ImageView(this).apply {
             setImageResource(iconRes)
             setColorFilter(UiTheme.STUDIO_TEXT_SECONDARY)
-            val size = (16 * density).toInt()
+            val size = (15 * density).toInt()
             layoutParams = LinearLayout.LayoutParams(size, size).apply {
-                marginStart = (4 * density).toInt()
-                marginEnd = (8 * density).toInt()
+                marginStart = (1 * density).toInt()
+                marginEnd = (6 * density).toInt()
             }
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
         }
@@ -707,7 +716,7 @@ class MainActivity : AppCompatActivity() {
             // Small start padding: the lamp's glow is a transparent halo
             // around the bulb, which already acts as padding. Relative
             // (start/end) so it mirrors correctly in Urdu.
-            setPaddingRelative(10, 4, 32, 4)
+            setPaddingRelative(6, 4, 14, 4)
             contentDescription = getString(contentDescRes)
             addView(light)
             addView(icon)

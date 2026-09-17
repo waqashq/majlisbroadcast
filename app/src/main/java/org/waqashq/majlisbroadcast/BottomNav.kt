@@ -54,7 +54,9 @@ private fun Context.navTab(iconRes: Int, label: String, tab: NavTab, active: Nav
     val tabView = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
         gravity = Gravity.CENTER
-        setPadding(0, 14, 0, 14)
+        // Phase 11d: taller tabs (was 14) -- the bar was shorter than
+        // Android's 48dp minimum comfortable touch target.
+        setPadding(0, 26, 0, 26)
         background = if (isActive) UiTheme.navActiveChip() else null
         isClickable = !isActive
         isFocusable = !isActive
@@ -62,7 +64,7 @@ private fun Context.navTab(iconRes: Int, label: String, tab: NavTab, active: Nav
     val icon = ImageView(this).apply {
         setImageResource(iconRes)
         setColorFilter(if (isActive) UiTheme.STUDIO_BORDER_TEAL else UiTheme.STUDIO_TEXT_MUTED)
-        layoutParams = LinearLayout.LayoutParams(40, 40)
+        layoutParams = LinearLayout.LayoutParams(48, 48)
     }
     val text = TextView(this).apply {
         text = label
@@ -71,7 +73,7 @@ private fun Context.navTab(iconRes: Int, label: String, tab: NavTab, active: Nav
         setTextColor(if (isActive) UiTheme.STUDIO_BORDER_TEAL else UiTheme.STUDIO_TEXT_MUTED)
         gravity = Gravity.CENTER
     }
-    tabView.addView(icon, LinearLayout.LayoutParams(40, 40))
+    tabView.addView(icon, LinearLayout.LayoutParams(48, 48))
     tabView.addView(text, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 5 })
     if (!isActive) {
         tabView.setOnClickListener { navigateToTab(tab) }

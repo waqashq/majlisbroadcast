@@ -217,6 +217,16 @@ the remaining gaps are 28px to match the spacing between the cards above.
 Share Event therefore sits directly under the Voice Effects card when
 idle, and the two readouts reappear above it while on air.
 
+Phase 11d, at the user's request: the bottom nav tabs are taller (26px
+vertical padding, 48px icons -- the bar was under Android's 48dp minimum
+touch target), and the two status chips sit side by side in one row
+instead of stacked. Each chip takes an equal half of the card width, so
+the website chip doesn't shift sideways as the app chip's label changes
+(OFFLINE -> CONNECTING -> RECONNECTING); labels are 12sp, single line,
+ellipsized as a last resort. Verified on the emulator that the longest
+label (RECONNECTING) still fits uncut in English and Urdu, at both normal
+and 480dpi (~360dp-wide) density.
+
 The WhatsApp/link-preview logo for the shared waqashq.org link is NOT an
 app change -- link previews are built by WhatsApp from the target page's
 Open Graph tags, and waqashq.org served none. Fixed in the separate
