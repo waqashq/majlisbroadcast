@@ -518,9 +518,13 @@ class MainActivity : AppCompatActivity() {
         }
         shareButton.setOnClickListener { onShareClicked() }
 
+        // Phase 11c: 28px gaps to match the spacing between the two cards
+        // above (was 40). The listener/data rows are hidden entirely while
+        // not live (see updateGoLiveButtonStyle) -- they were blank then
+        // anyway, and left a large empty gap above Share Event.
         scrollContent.addView(
             listenerCountText,
-            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 40 }
+            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 28 }
         )
         scrollContent.addView(
             dataUsageText,
@@ -528,7 +532,7 @@ class MainActivity : AppCompatActivity() {
         )
         scrollContent.addView(
             shareButton,
-            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 40 }
+            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 28 }
         )
 
         val scrollView = ScrollView(this).apply { addView(scrollContent) }
@@ -561,6 +565,11 @@ class MainActivity : AppCompatActivity() {
         // the flat red fill (live "Stop") -- same on-fill pairing already
         // used by the Share button elsewhere on this screen.
         goLiveButton.setTextColor(if (isLive) UiTheme.STUDIO_TEXT_PRIMARY else UiTheme.STUDIO_BG)
+        // Called on every idle<->live transition, so the live-only rows
+        // below the voice effects card are shown/hidden here too.
+        val liveOnly = if (isLive) View.VISIBLE else View.GONE
+        listenerCountText.visibility = liveOnly
+        dataUsageText.visibility = liveOnly
     }
 
     private fun updateRecordButtonStyle() {

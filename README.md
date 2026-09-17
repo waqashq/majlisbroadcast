@@ -209,6 +209,24 @@ lamp is now drawn on a CPU (software) layer -- the GPU path left faint
 stray specks in the nearly-transparent edge of the glow. UiTheme's
 now-unused `studioMicCircle` helper was removed.
 
+Phase 11c, at the user's request: closed the dead space between the Voice
+Effects card and the Share Event button. The listener-count and data-used
+rows sit between them and are blank while not live, so they (plus their
+40px margins) left a large empty gap; they're now `GONE` unless live, and
+the remaining gaps are 28px to match the spacing between the cards above.
+Share Event therefore sits directly under the Voice Effects card when
+idle, and the two readouts reappear above it while on air.
+
+The WhatsApp/link-preview logo for the shared waqashq.org link is NOT an
+app change -- link previews are built by WhatsApp from the target page's
+Open Graph tags, and waqashq.org served none. Fixed in the separate
+website repo (`malfoozatWebsite`): `og:*`/`twitter:*` tags added to
+`src/layouts/Base.astro` plus a dedicated 630x630 ~44KB
+`public/assets/og-image.jpg` (square so WhatsApp's thumbnail crop doesn't
+cut the logo; WhatsApp silently drops previews for images over ~300KB, and
+the existing logo.png/favicon-512.png are 397KB/377KB). Needs the site's
+normal manual build + upload to take effect.
+
 Emulator note: the `salah_test` AVD's host process repeatedly crashed
 (exit 139) mid-way through reading the host's DNS configuration whenever
 the app made network calls; starting it with
