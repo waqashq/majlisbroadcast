@@ -81,10 +81,21 @@ class SpectrumView @JvmOverloads constructor(
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
+        // Level-zone colouring, the way hardware level meters have always
+        // done it: green for normal, amber for hot, red near the top. The
+        // shader spans the whole view, so each bar only reveals the zones it
+        // actually reaches -- a quiet bar is entirely green, only a loud one
+        // shows red at its tip. (Colouring by frequency instead would look
+        // busier and means nothing; zone colouring tells you about level.)
         barGradient = LinearGradient(
             0f, 0f, 0f, h.toFloat(),
-            UiTheme.PRIMARY_GREEN,
-            ColorUtils.blendARGB(UiTheme.PRIMARY_GREEN, UiTheme.STUDIO_INSET_BG, 0.55f),
+            intArrayOf(
+                UiTheme.METER_RED,
+                UiTheme.METER_AMBER,
+                UiTheme.METER_GREEN,
+                ColorUtils.blendARGB(UiTheme.METER_GREEN, UiTheme.STUDIO_INSET_BG, 0.45f)
+            ),
+            floatArrayOf(0f, 0.16f, 0.42f, 1f),
             Shader.TileMode.CLAMP
         )
     }

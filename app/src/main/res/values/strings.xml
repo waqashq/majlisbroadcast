@@ -162,4 +162,9 @@
 
     <string name="shortcut_go_live_short">Go Live</string>
     <string name="shortcut_go_live_long">Go Live (Majlis Broadcast)</string>
+    <!-- Phase 11f: short labels for the round Go Live / REC buttons -->
+    <string name="btn_live_short">LIVE</string>
+    <string name="btn_rec_short">REC</string>
+    <string name="btn_stop_short">STOP</string>
+    <string name="cd_mic_mute">Mute microphone</string>
 </resources>

@@ -245,6 +245,37 @@ at 240px tall instead of the old 40px strip. Unlike the old strip this is
 genuinely spectral -- the previous one only had a single overall peak
 level to work with.
 
+Phase 11f, at the user's request: (1) a local mic preview -- `MicPreview`
+(new) captures the mic while the Broadcast screen is in the foreground and
+NOT broadcasting, runs it through the same `SpectrumAnalyzer` with the same
+fixed gain as the live path, and drives the bars, so the mic can be checked
+before going live (section 8's "confirm the mic is registering before
+speaking"). It never touches the network/encoder/disk, stops on
+onPause/onDestroy, and is stopped explicitly in `startBroadcastNow()`
+before `BroadcastService` starts -- only one capture can hold the mic, so
+the preview must be gone first. (2) The mic button is much bigger (36px ->
+52dp with padding) and now reads as a button; it was never broken, just
+tiny next to the new bars -- it is still the mute toggle while live, now
+with a content description. (3) The idle disconnect icon is smaller
+(86dp -> 66dp). (4) The visualizer bars are coloured by level zone, the
+green/amber/red of a hardware level meter: one gradient spans the view, so
+each bar only reveals the zones it reaches (quiet = all green, loud = red
+tip; green to ~80%, amber ~85%, red 95%+). Colouring by frequency instead
+was rejected -- it looks busier and carries no information. (5) Go Live and
+Start Recording are now two round domed buttons side by side, labelled
+LIVE (STOP while live) and REC, with a pressed state; `UiTheme.round3dButton`
+takes the diameter in px because a radial gradient's radius set from code
+is in pixels, not a fraction of the bounds. The long `btn_go_live` /
+`btn_start_recording` / `btn_stop_recording` strings are now unused (lint
+reports them) but kept in both languages in case the long form is wanted
+back.
+
+Verified: clean build + lint, the dex checked for absence of the temporary
+demo-feed code used for screenshots, and the colour-zone mapping checked
+against bar heights. NOT verified on screen: the meter colours and the
+domed buttons under real audio -- the emulator's mic is silent and its host
+process kept crashing, so that check moved to the phone.
+
 The FFT band maths was verified before wiring it up by mirroring the
 algorithm in JS and feeding it known tones: at 512 points the bins were
 wider than the low bands, which collapsed every bar below ~800Hz and put a

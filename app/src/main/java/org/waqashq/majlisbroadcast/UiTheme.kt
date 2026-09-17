@@ -1,6 +1,9 @@
 package org.waqashq.majlisbroadcast
 
+import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.StateListDrawable
+import androidx.core.graphics.ColorUtils
 
 /**
  * "Noor" -- the app's shared palette/drawable helpers, redesigned at the
@@ -42,6 +45,52 @@ object UiTheme {
     const val STUDIO_ON_AIR_BG = 0xFF141718.toInt()
     const val STUDIO_AMBER = 0xFFE8A33D.toInt()
     const val STUDIO_STOP_RED = 0xFFE0453A.toInt()
+
+    // Phase 11f: level-meter zones for the frequency visualizer -- the
+    // conventional green/amber/red of a hardware level meter, slightly
+    // brighter than the flat UI accents so the meter reads as an
+    // instrument rather than as more chrome.
+    const val METER_GREEN = 0xFF2FD67E.toInt()
+    const val METER_AMBER = 0xFFF2B33D.toInt()
+    const val METER_RED = 0xFFF0483C.toInt()
+
+    /**
+     * Phase 11f: the round, domed Go Live / REC buttons. Same trick as
+     * StatusLightView: a radial gradient whose centre sits up and to the
+     * left reads as a lit dome, a darker rim grounds it, and the pressed
+     * state dims the whole thing so the tap is felt.
+     *
+     * [diameterPx] is needed because a radial gradient's radius set from
+     * code is in pixels (only XML-inflated drawables can express it as a
+     * fraction of the bounds).
+     */
+    fun round3dButton(base: Int, diameterPx: Float): StateListDrawable {
+        fun face(color: Int) = GradientDrawable(
+            GradientDrawable.Orientation.TOP_BOTTOM,
+            intArrayOf(
+                ColorUtils.blendARGB(color, Color.WHITE, 0.42f),
+                color,
+                ColorUtils.blendARGB(color, Color.BLACK, 0.42f)
+            )
+        ).apply {
+            shape = GradientDrawable.OVAL
+            gradientType = GradientDrawable.RADIAL_GRADIENT
+            setGradientCenter(0.34f, 0.28f)
+            gradientRadius = diameterPx * 0.85f
+            setStroke(3, ColorUtils.blendARGB(color, Color.BLACK, 0.55f))
+        }
+        return StateListDrawable().apply {
+            addState(intArrayOf(android.R.attr.state_pressed), face(ColorUtils.blendARGB(base, Color.BLACK, 0.22f)))
+            addState(intArrayOf(), face(base))
+        }
+    }
+
+    /** Flat circular outline, for the round secondary (REC-when-idle) state. */
+    fun roundOutline(strokeColor: Int, strokeWidthPx: Int = 3): GradientDrawable = GradientDrawable().apply {
+        shape = GradientDrawable.OVAL
+        setColor(STUDIO_INSET_BG)
+        setStroke(strokeWidthPx, strokeColor)
+    }
 
     fun pillButtonBackground(color: Int): GradientDrawable = GradientDrawable().apply {
         shape = GradientDrawable.RECTANGLE

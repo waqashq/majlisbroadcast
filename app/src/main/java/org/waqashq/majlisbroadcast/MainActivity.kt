@@ -97,6 +97,11 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // Phase 11f: local mic preview -- drives the frequency bars while NOT
+    // broadcasting so the mic can be checked before going live. Holds the
+    // mic, so it must be released before BroadcastService starts.
+    private var micPreview: MicPreview? = null
+    private var roundButtonSizePx = 0
     private var isLive = false
     // Phase 9: set from the "Go Live" shortcut's intent extra, consumed
     // (set back to false) the first time maybeAutoGoLive() actually fires.
@@ -185,12 +190,15 @@ class MainActivity : AppCompatActivity() {
         websitePolling = true
         uiHandler.removeCallbacks(websitePoller)
         uiHandler.post(websitePoller)
+        startMicPreview()
     }
 
     override fun onPause() {
         super.onPause()
         websitePolling = false
         uiHandler.removeCallbacks(websitePoller)
+        // Never hold the mic (or burn battery) while off screen.
+        stopMicPreview()
     }
 
     private fun currentBitrateLabel(): String = getString(R.string.bitrate_format, AppSettings.bitRateBps(this) / 1000)
@@ -316,21 +324,45 @@ class MainActivity : AppCompatActivity() {
             gravity = Gravity.CENTER
         }
 
+        // Phase 11f: the two primary controls are round domed buttons side
+        // by side (LIVE / REC) instead of two stacked full-width pills.
+        // Short labels because a circle has far less room than a pill.
+        roundButtonSizePx = (112 * resources.displayMetrics.density).toInt()
         goLiveButton = Button(this).apply {
-            textSize = 16f
+            textSize = 19f
             setTypeface(typeface, Typeface.BOLD)
             isAllCaps = false
-            setPadding(0, 34, 0, 34)
+            setPadding(0, 0, 0, 0)
+            // Buttons carry a default minWidth/minHeight and insets that
+            // would stop a circle from actually being circular.
+            minWidth = 0
+            minHeight = 0
+            stateListAnimator = null
         }
         goLiveButton.setOnClickListener { onGoLiveClicked() }
 
         recordButton = Button(this).apply {
-            textSize = 14f
+            textSize = 17f
             setTypeface(typeface, Typeface.BOLD)
             isAllCaps = false
-            setPadding(0, 22, 0, 22)
+            setPadding(0, 0, 0, 0)
+            minWidth = 0
+            minHeight = 0
+            stateListAnimator = null
         }
         recordButton.setOnClickListener { onRecordClicked() }
+
+        val buttonRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            addView(goLiveButton, LinearLayout.LayoutParams(roundButtonSizePx, roundButtonSizePx))
+            addView(
+                recordButton,
+                LinearLayout.LayoutParams(roundButtonSizePx, roundButtonSizePx).apply {
+                    marginStart = (28 * resources.displayMetrics.density).toInt()
+                }
+            )
+        }
 
         // ---- mic + waveform + bitrate row -- a flat bordered inset strip
         // (redesign) instead of a filled circle behind the mic icon. Tapping
@@ -343,12 +375,21 @@ class MainActivity : AppCompatActivity() {
             background = UiTheme.insetBackground()
             setPadding(24, 18, 24, 18)
         }
+        // Phase 11f: much bigger and now visibly a button (bordered circle)
+        // -- at 36px beside the new 240px bars it read as decoration, and it
+        // is in fact the mute control (tap while live to mute/unmute).
         micIcon = ImageView(this).apply {
             setImageResource(R.drawable.ic_mic)
-            layoutParams = LinearLayout.LayoutParams(36, 36).apply { marginEnd = 18 }
+            val d = resources.displayMetrics.density
+            val box = (52 * d).toInt()
+            val pad = (13 * d).toInt()
+            layoutParams = LinearLayout.LayoutParams(box, box).apply { marginEnd = (14 * d).toInt() }
+            setPadding(pad, pad, pad, pad)
             isClickable = true
-            setOnClickListener { onMicToggleClicked() }
+            isFocusable = true
+            contentDescription = getString(R.string.cd_mic_mute)
         }
+        micIcon.setOnClickListener { onMicToggleClicked() }
 
         // Phase 11e: real frequency bars (SpectrumAnalyzer), much taller than
         // the old 40px level strip -- the height is what makes it read as a
@@ -382,7 +423,7 @@ class MainActivity : AppCompatActivity() {
 
         listOf(
             indicators, latencyRow, disconnectedIcon, elapsedText, statusSubtitle,
-            goLiveButton, recordButton, meterRow, micClippingText
+            buttonRow, meterRow, micClippingText
         ).forEach {
             card.addView(
                 it,
@@ -398,12 +439,11 @@ class MainActivity : AppCompatActivity() {
         // Explicit size: the loop above adds every card child with
         // WRAP_CONTENT params, which would otherwise leave this at the
         // drawable's own 48dp and look lost in the space it's filling.
-        val discSize = (86 * resources.displayMetrics.density).toInt()
+        val discSize = (66 * resources.displayMetrics.density).toInt()
         disconnectedIcon.layoutParams = LinearLayout.LayoutParams(discSize, discSize).apply { topMargin = 24 }
         // Full card width so the two indicator chips inside can split it in half.
         indicators.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 20 }
-        goLiveButton.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 44 }
-        recordButton.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 28 }
+        buttonRow.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 40 }
         meterRow.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 40 }
         micClippingText.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 20 }
         scrollContent.addView(card, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
@@ -583,8 +623,11 @@ class MainActivity : AppCompatActivity() {
 
     /** Recolors/relabels the Go Live button for its current idle/live state. */
     private fun updateGoLiveButtonStyle() {
-        goLiveButton.text = getString(if (isLive) R.string.btn_stop_live else R.string.btn_go_live)
-        goLiveButton.background = UiTheme.pillButtonBackground(if (isLive) UiTheme.STUDIO_STOP_RED else UiTheme.PRIMARY_GREEN)
+        goLiveButton.text = getString(if (isLive) R.string.btn_stop_short else R.string.btn_live_short)
+        goLiveButton.background = UiTheme.round3dButton(
+            if (isLive) UiTheme.STUDIO_STOP_RED else UiTheme.PRIMARY_GREEN,
+            roundButtonSizePx.toFloat()
+        )
         // Dark text on the flat accent fill (idle "Go live"), light text on
         // the flat red fill (live "Stop") -- same on-fill pairing already
         // used by the Share button elsewhere on this screen.
@@ -602,9 +645,16 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateRecordButtonStyle() {
         val recording = BroadcastService.isRecording
-        recordButton.text = getString(if (recording) R.string.btn_stop_recording else R.string.btn_start_recording)
-        recordButton.background = UiTheme.outlinePillBackground(if (recording) UiTheme.STUDIO_STOP_RED else UiTheme.STUDIO_TEXT_MUTED)
-        recordButton.setTextColor(if (recording) UiTheme.STUDIO_STOP_RED else UiTheme.STUDIO_TEXT_PRIMARY)
+        recordButton.text = getString(R.string.btn_rec_short)
+        // Filled red dome while actually recording, quiet outline otherwise --
+        // the label stays REC either way, so the fill is what tells you it is
+        // running (two STOP buttons side by side would be ambiguous).
+        recordButton.background = if (recording) {
+            UiTheme.round3dButton(UiTheme.STUDIO_STOP_RED, roundButtonSizePx.toFloat())
+        } else {
+            UiTheme.roundOutline(UiTheme.STUDIO_TEXT_MUTED)
+        }
+        recordButton.setTextColor(if (recording) UiTheme.STUDIO_TEXT_PRIMARY else UiTheme.STUDIO_TEXT_SECONDARY)
         recordButton.isEnabled = isLive
         recordButton.alpha = if (isLive) 1f else 0.5f
     }
@@ -655,6 +705,27 @@ class MainActivity : AppCompatActivity() {
         micIcon.setColorFilter(micColor)
         latencyIcon.setColorFilter(if (isLiveState) UiTheme.STUDIO_ON_AIR_GREEN else UiTheme.STUDIO_TEXT_MUTED)
         latencyText.setTextColor(if (isLiveState) UiTheme.STUDIO_ON_AIR_GREEN else UiTheme.STUDIO_TEXT_MUTED)
+    }
+
+    // ================= Mic preview (Phase 11f) =================
+
+    /**
+     * Starts local mic capture so the frequency bars respond before going
+     * live. No-op while live (BroadcastService owns the mic then), without
+     * mic permission, or if already running.
+     */
+    private fun startMicPreview() {
+        if (isLive || micPreview != null) return
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) return
+        micPreview = MicPreview(AppSettings.sampleRate(this)) { bands ->
+            if (!isLive) visualizer.pushSpectrum(bands)
+        }.also { it.start() }
+    }
+
+    private fun stopMicPreview() {
+        micPreview?.stop()
+        micPreview = null
+        if (!isLive) visualizer.reset()
     }
 
     // ================= Website live light (Phase 11) =================
@@ -791,6 +862,7 @@ class MainActivity : AppCompatActivity() {
             return
         }
         refreshStaticInfo()
+        startMicPreview()
         maybeAutoGoLive()
     }
 
@@ -857,6 +929,7 @@ class MainActivity : AppCompatActivity() {
             dataUsageText.text = ""
             visualizer.reset()
             uiHandler.removeCallbacks(livePoller)
+            startMicPreview()
             awaitStateAndShowDialog(
                 setOf(BroadcastEngine.State.STOPPED, BroadcastEngine.State.IDLE),
                 getString(R.string.dialog_broadcast_ended)
@@ -866,6 +939,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun startBroadcastNow() {
         DebugLog.log("Go Live tapped")
+        // Release the mic first: only one capture can own it, so the preview
+        // has to be gone before BroadcastService opens its own AudioRecord.
+        stopMicPreview()
         // Snapshot now, not just at buildUi() time -- this is the
         // exact value BroadcastService/BroadcastEngine will read a
         // moment from now, so the meter reflects the actual running
@@ -1015,6 +1091,7 @@ class MainActivity : AppCompatActivity() {
                     dataUsageText.text = ""
                     visualizer.reset()
                     uiHandler.removeCallbacks(livePoller)
+                    startMicPreview()
                 }
             }
             else -> {}
@@ -1065,6 +1142,7 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         uiHandler.removeCallbacks(livePoller)
+        stopMicPreview()
         // The broadcast service is NOT stopped here -- it keeps running in
         // the background. Only the explicit Stop control ends it.
     }
