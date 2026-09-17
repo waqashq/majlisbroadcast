@@ -70,7 +70,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var goLiveButton: Button
     private lateinit var recordButton: Button
     private lateinit var micIcon: ImageView
-    private lateinit var waveform: WaveformView
+    private lateinit var visualizer: SpectrumView
+    private lateinit var disconnectedIcon: ImageView
     private lateinit var bitrateText: TextView
     private lateinit var micClippingText: TextView
     private lateinit var listenerCountText: TextView
@@ -104,11 +105,11 @@ class MainActivity : AppCompatActivity() {
     private val livePoller = object : Runnable {
         override fun run() {
             pollLiveState()
-            // 150ms, not 300 -- matches BroadcastEngine's own mic-level
+            // 150ms, matching BroadcastEngine's own mic-level/spectrum
             // report throttle (reportLevel() there caps at ~150ms), so the
-            // waveform picks up fresh data twice as often. Smaller, more
-            // frequent position jumps read as noticeably smoother without
-            // needing custom scroll interpolation (see WaveformView doc).
+            // visualizer gets fresh band data as soon as it exists. Its own
+            // per-frame easing (SpectrumView) does the smoothing between
+            // these updates.
             if (isLive) uiHandler.postDelayed(this, 150)
         }
     }
@@ -299,6 +300,16 @@ class MainActivity : AppCompatActivity() {
             gravity = Gravity.CENTER
         }
 
+        // Phase 11e: fills the card's empty middle while not on air -- the
+        // space the elapsed clock occupies once live. Muted, not red: this
+        // is a resting state, not an error (the chips above already say
+        // OFFLINE), and the two swap places in updateGoLiveButtonStyle.
+        disconnectedIcon = ImageView(this).apply {
+            setImageResource(R.drawable.ic_disconnected)
+            setColorFilter(UiTheme.STUDIO_TEXT_MUTED)
+            contentDescription = getString(R.string.status_pill_offline)
+        }
+
         statusSubtitle = TextView(this).apply {
             textSize = 13f
             setTextColor(UiTheme.STUDIO_TEXT_MUTED)
@@ -339,8 +350,11 @@ class MainActivity : AppCompatActivity() {
             setOnClickListener { onMicToggleClicked() }
         }
 
-        waveform = WaveformView(this).apply {
-            layoutParams = LinearLayout.LayoutParams(0, 40, 1f).apply {
+        // Phase 11e: real frequency bars (SpectrumAnalyzer), much taller than
+        // the old 40px level strip -- the height is what makes it read as a
+        // visualizer rather than a thin meter line.
+        visualizer = SpectrumView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(0, 240, 1f).apply {
                 marginEnd = 16
             }
         }
@@ -352,7 +366,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         meterRow.addView(micIcon)
-        meterRow.addView(waveform)
+        meterRow.addView(visualizer)
         meterRow.addView(bitrateText)
 
         micClippingText = TextView(this).apply {
@@ -367,7 +381,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         listOf(
-            indicators, latencyRow, elapsedText, statusSubtitle,
+            indicators, latencyRow, disconnectedIcon, elapsedText, statusSubtitle,
             goLiveButton, recordButton, meterRow, micClippingText
         ).forEach {
             card.addView(
@@ -381,6 +395,11 @@ class MainActivity : AppCompatActivity() {
         // width. Generous top margins per user feedback: more breathing
         // room between elapsed time -> Go Live, Stop -> Start Recording,
         // and Start Recording -> the mic/waveform row.
+        // Explicit size: the loop above adds every card child with
+        // WRAP_CONTENT params, which would otherwise leave this at the
+        // drawable's own 48dp and look lost in the space it's filling.
+        val discSize = (86 * resources.displayMetrics.density).toInt()
+        disconnectedIcon.layoutParams = LinearLayout.LayoutParams(discSize, discSize).apply { topMargin = 24 }
         // Full card width so the two indicator chips inside can split it in half.
         indicators.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 20 }
         goLiveButton.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 44 }
@@ -575,6 +594,10 @@ class MainActivity : AppCompatActivity() {
         val liveOnly = if (isLive) View.VISIBLE else View.GONE
         listenerCountText.visibility = liveOnly
         dataUsageText.visibility = liveOnly
+        // The elapsed clock and the disconnected icon share the same slot in
+        // the card: exactly one of them is visible at any time.
+        elapsedText.visibility = liveOnly
+        disconnectedIcon.visibility = if (isLive) View.GONE else View.VISIBLE
     }
 
     private fun updateRecordButtonStyle() {
@@ -832,7 +855,7 @@ class MainActivity : AppCompatActivity() {
             latencyText.text = getString(R.string.latency_unavailable)
             listenerCountText.text = getString(R.string.listener_count_unavailable)
             dataUsageText.text = ""
-            waveform.reset()
+            visualizer.reset()
             uiHandler.removeCallbacks(livePoller)
             awaitStateAndShowDialog(
                 setOf(BroadcastEngine.State.STOPPED, BroadcastEngine.State.IDLE),
@@ -990,7 +1013,7 @@ class MainActivity : AppCompatActivity() {
                     latencyText.text = getString(R.string.latency_unavailable)
                     listenerCountText.text = getString(R.string.listener_count_unavailable)
                     dataUsageText.text = ""
-                    waveform.reset()
+                    visualizer.reset()
                     uiHandler.removeCallbacks(livePoller)
                 }
             }
@@ -1002,7 +1025,7 @@ class MainActivity : AppCompatActivity() {
             elapsedText.text = formatElapsed(elapsedSec)
         }
 
-        waveform.pushLevel(BroadcastService.micLevel)
+        visualizer.pushSpectrum(BroadcastService.micSpectrum)
         micClippingText.visibility = if (BroadcastService.micClipping) View.VISIBLE else View.INVISIBLE
 
         val latencyEstimateMs = (BroadcastService.queueDepth * 23) + 200

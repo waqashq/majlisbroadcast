@@ -85,6 +85,9 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
             private set
         @Volatile var micClipping: Boolean = false
             private set
+        /** Phase 11e: per-band mic levels (0-100) for the Broadcast screen's frequency visualizer. */
+        @Volatile var micSpectrum: IntArray = IntArray(SpectrumView.BAND_COUNT)
+            private set
         /** SystemClock.elapsedRealtime() when Go Live was tapped, or 0 if never started this session. */
         @Volatile var sessionStartRealtime: Long = 0
             private set
@@ -403,9 +406,11 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
         if (changed) updateNotification(state)
     }
 
-    override fun onLevelUpdate(level: Int, clipping: Boolean) {
+    override fun onLevelUpdate(level: Int, clipping: Boolean, bands: IntArray) {
         micLevel = level
         micClipping = clipping
+        // Copy: the engine reuses its own array between reports.
+        micSpectrum = bands.copyOf()
     }
 
     // ================= Network handover (section 7) =================

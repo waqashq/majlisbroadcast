@@ -45,8 +45,13 @@ class BroadcastEngine(
             dropCount: Long, reconnectCount: Int, scoRefusalCount: Int, focusLost: Boolean,
             queueDepth: Int, burstDropEvents: Int, manuallyMuted: Boolean
         )
-        /** level: 0-100 peak scale. Throttled to ~150ms; safe to call often. */
-        fun onLevelUpdate(level: Int, clipping: Boolean)
+        /**
+         * level: 0-100 peak scale. Throttled to ~150ms; safe to call often.
+         * bands: per-band 0-100 levels for the Broadcast screen's frequency
+         * visualizer (Phase 11e). The array is reused between calls -- copy
+         * it if you keep it.
+         */
+        fun onLevelUpdate(level: Int, clipping: Boolean, bands: IntArray)
     }
 
     companion object {
@@ -384,11 +389,22 @@ class BroadcastEngine(
     }
 
     private var lastLevelReportMs = 0L
-    private fun reportLevel(level: Int, clipped: Boolean) {
+    // Phase 11e: the visualizer's per-band levels. Analyzed here, on the
+    // capture thread, only when a level report is actually due (~150ms), so
+    // the FFT cost is bounded and the reused buffers never allocate.
+    private val spectrumAnalyzer = SpectrumAnalyzer(sampleRate, SpectrumView.BAND_COUNT)
+    private val spectrumBands = IntArray(SpectrumView.BAND_COUNT)
+
+    private fun reportLevel(level: Int, clipped: Boolean, pcm: ByteArray? = null, pcmBytes: Int = 0) {
         val now = SystemClock.elapsedRealtime()
         if (now - lastLevelReportMs < 150) return
         lastLevelReportMs = now
-        listener.onLevelUpdate(level, clipped)
+        if (pcm != null && pcmBytes > 0) {
+            spectrumAnalyzer.analyze(pcm, pcmBytes, spectrumBands)
+        } else {
+            spectrumBands.fill(0)
+        }
+        listener.onLevelUpdate(level, clipped, spectrumBands)
     }
 
     // ================= Capture + encode thread =================
@@ -447,7 +463,7 @@ class BroadcastEngine(
                         read = audioRecord.read(pcmBuf, 0, pcmBuf.size, AudioRecord.READ_BLOCKING)
                         if (read > 0) {
                             val (level, clipped) = applyEffectsAndMeasure(pcmBuf, read)
-                            reportLevel(level, clipped)
+                            reportLevel(level, clipped, pcmBuf, read)
                         }
                     }
                     val inputBuffer = codec.getInputBuffer(inIndex)

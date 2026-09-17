@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Phase 11e: broadcast-waves-with-a-slash, shown in the Broadcast card's
+     empty middle while not on air (where the elapsed clock goes when live).
+     Same outline style as ic_radio / ic_globe. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+    <!-- centre dot (the mic/source) -->
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M24,24 m-3.2,0 a3.2,3.2 0 1 0 6.4,0 a3.2,3.2 0 1 0 -6.4,0"/>
+    <!-- inner wave pair -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FF000000"
+        android:strokeWidth="2.6"
+        android:strokeLineCap="round"
+        android:pathData="M16.5,16.5 a10.6,10.6 0 0 0 0,15 M31.5,31.5 a10.6,10.6 0 0 0 0,-15"/>
+    <!-- outer wave pair -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FF000000"
+        android:strokeWidth="2.6"
+        android:strokeLineCap="round"
+        android:pathData="M10.6,10.6 a19,19 0 0 0 0,26.8 M37.4,37.4 a19,19 0 0 0 0,-26.8"/>
+    <!-- slash: the "not connected" part -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FF000000"
+        android:strokeWidth="2.8"
+        android:strokeLineCap="round"
+        android:pathData="M8,40 L40,8"/>
+</vector>

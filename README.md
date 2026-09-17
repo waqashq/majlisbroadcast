@@ -227,6 +227,33 @@ ellipsized as a last resort. Verified on the emulator that the longest
 label (RECONNECTING) still fits uncut in English and Urdu, at both normal
 and 480dpi (~360dp-wide) density.
 
+Phase 11e, at the user's request: three Broadcast-screen changes.
+(1) A disconnected icon (broadcast waves with a slash, muted grey) now
+fills the card's empty middle while not on air -- the slot the elapsed
+clock uses once live; exactly one of the two is ever visible.
+(2) Bottom nav tabs taller again (26px -> 36px vertical padding).
+(3) The mic level strip is replaced by a real frequency-bar visualizer.
+`SpectrumAnalyzer` (new) runs a 2048-point FFT with a Hann window over the
+newest PCM window and reports 22 log-spaced bands (100Hz-8kHz, per-band
+peak) as 0-100 levels; it runs on the capture thread but only when a level
+report is already due (~150ms) and reuses all buffers, so it neither
+allocates nor meaningfully competes with the encoder. `SpectrumView` (new,
+replacing `WaveformView`) draws bottom-anchored rounded bars with a
+vertical gradient, eased per animation frame with fast attack/slow release
+plus light neighbour blending so the outline flows instead of twitching,
+at 240px tall instead of the old 40px strip. Unlike the old strip this is
+genuinely spectral -- the previous one only had a single overall peak
+level to work with.
+
+The FFT band maths was verified before wiring it up by mirroring the
+algorithm in JS and feeding it known tones: at 512 points the bins were
+wider than the low bands, which collapsed every bar below ~800Hz and put a
+1kHz tone in the 660-800Hz bar; at 2048 points 200Hz/1kHz/4kHz each land in
+the correct band and silence reads zero. The on-device look was checked by
+temporarily feeding the view a synthetic moving spectrum (an emulator's mic
+is silent), then reverting that. Still unverified on real audio: that the
+bars track a real voice sensibly -- worth a look on the phone.
+
 The WhatsApp/link-preview logo for the shared waqashq.org link is NOT an
 app change -- link previews are built by WhatsApp from the target page's
 Open Graph tags, and waqashq.org served none. Fixed in the separate

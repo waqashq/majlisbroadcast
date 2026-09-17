@@ -54,9 +54,9 @@ private fun Context.navTab(iconRes: Int, label: String, tab: NavTab, active: Nav
     val tabView = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
         gravity = Gravity.CENTER
-        // Phase 11d: taller tabs (was 14) -- the bar was shorter than
-        // Android's 48dp minimum comfortable touch target.
-        setPadding(0, 26, 0, 26)
+        // Phase 11d/11e: taller tabs (14 -> 26 -> 36) -- the bar started out
+        // shorter than Android's 48dp minimum comfortable touch target.
+        setPadding(0, 36, 0, 36)
         background = if (isActive) UiTheme.navActiveChip() else null
         isClickable = !isActive
         isFocusable = !isActive
