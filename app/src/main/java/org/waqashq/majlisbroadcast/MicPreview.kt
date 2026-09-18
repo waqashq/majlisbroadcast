@@ -26,6 +26,8 @@ import android.os.Process
  */
 class MicPreview(
     private val sampleRate: Int,
+    /** Phase 11h: same NoiseReducer as the live path, so the bars match what listeners will hear. */
+    private val noiseReduction: Boolean,
     private val onBands: (IntArray) -> Unit
 ) {
     private companion object {
@@ -40,6 +42,7 @@ class MicPreview(
     private val uiHandler = Handler(Looper.getMainLooper())
     private val analyzer = SpectrumAnalyzer(sampleRate, SpectrumView.BAND_COUNT)
     private val bands = IntArray(SpectrumView.BAND_COUNT)
+    private val noiseReducer = NoiseReducer(sampleRate)
 
     /** No-op if already running. Caller must hold RECORD_AUDIO. */
     fun start() {
@@ -85,10 +88,12 @@ class MicPreview(
         thread = null
     }
 
+    /** Noise reduction (if on) then the same fixed gain as BroadcastEngine. */
     private fun applyGain(buf: ByteArray, byteCount: Int) {
         var i = 0
         while (i + 1 < byteCount) {
-            val sample = ((buf[i + 1].toInt() shl 8) or (buf[i].toInt() and 0xFF)).toShort()
+            var sample = ((buf[i + 1].toInt() shl 8) or (buf[i].toInt() and 0xFF)).toShort().toDouble()
+            if (noiseReduction) sample = noiseReducer.process(sample)
             val boosted = (sample * GAIN_FACTOR).toInt()
                 .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
             buf[i] = (boosted and 0xFF).toByte()

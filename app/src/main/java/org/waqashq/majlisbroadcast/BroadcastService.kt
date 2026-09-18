@@ -51,7 +51,9 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
         private const val ACTION_UNMUTE_MIC = "org.waqashq.majlisbroadcast.action.UNMUTE_MIC"
         private const val ACTION_SET_BASS_LEVEL = "org.waqashq.majlisbroadcast.action.SET_BASS_LEVEL"
         private const val ACTION_SET_ECHO_LEVEL = "org.waqashq.majlisbroadcast.action.SET_ECHO_LEVEL"
+        private const val ACTION_SET_NOISE_REDUCTION = "org.waqashq.majlisbroadcast.action.SET_NOISE_REDUCTION"
         private const val EXTRA_LEVEL = "level"
+        private const val EXTRA_ENABLED = "enabled"
 
         // Phase 7: how often to poll AzuraCast's now-playing API while
         // live. This is a cosmetic nicety, not part of the streaming
@@ -146,6 +148,14 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
             context.startService(intent)
         }
 
+        fun setNoiseReduction(context: Context, enabled: Boolean) {
+            val intent = Intent(context, BroadcastService::class.java).apply {
+                action = ACTION_SET_NOISE_REDUCTION
+                putExtra(EXTRA_ENABLED, enabled)
+            }
+            context.startService(intent)
+        }
+
         fun setBassLevel(context: Context, level: Int) {
             val intent = Intent(context, BroadcastService::class.java).apply {
                 action = ACTION_SET_BASS_LEVEL
@@ -214,6 +224,12 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
             engine?.setManuallyMuted(false)
             return START_NOT_STICKY
         }
+        if (intent?.action == ACTION_SET_NOISE_REDUCTION) {
+            val enabled = intent.getBooleanExtra(EXTRA_ENABLED, true)
+            engine?.setNoiseReduction(enabled)
+            AppSettings.saveNoiseReduction(this, enabled)
+            return START_NOT_STICKY
+        }
         if (intent?.action == ACTION_SET_BASS_LEVEL) {
             val level = intent.getIntExtra(EXTRA_LEVEL, 0)
             engine?.setBassLevel(level)
@@ -254,6 +270,7 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
                 AppSettings.bitRateBps(this),
                 AppSettings.bassLevel(this),
                 AppSettings.echoLevel(this),
+                AppSettings.noiseReduction(this),
                 am,
                 this
             ).also { it.start() }

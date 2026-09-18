@@ -34,6 +34,7 @@ class BroadcastEngine(
     private val bitRateBps: Int,
     initialBassLevel: Int,
     initialEchoLevel: Int,
+    initialNoiseReduction: Boolean,
     private val audioManager: AudioManager,
     private val listener: Listener
 ) {
@@ -202,6 +203,19 @@ class BroadcastEngine(
     fun bytesUploaded(): Long = bytesUploadedTotal
 
     /** 0 = off (identity filter, zero CPU/behavior change). Up to +12dB low-shelf boost at 100. */
+    /**
+     * Phase 11h: high-pass + gentle gate on the mic input (NoiseReducer).
+     * Applied before the voice effects and before the gain stage, so what
+     * gets boosted is already de-rumbled.
+     */
+    @Volatile private var noiseReductionEnabled = initialNoiseReduction
+    private val noiseReducer = NoiseReducer(sampleRate)
+
+    fun setNoiseReduction(enabled: Boolean) {
+        if (enabled && !noiseReductionEnabled) noiseReducer.reset()
+        noiseReductionEnabled = enabled
+    }
+
     fun setBassLevel(level: Int) {
         bassLevel = level.coerceIn(0, 100)
         recomputeBassCoefficients()
@@ -525,6 +539,7 @@ class BroadcastEngine(
         var i = 0
         while (i + 1 < byteCount) {
             var sample = ((buf[i + 1].toInt() shl 8) or (buf[i].toInt() and 0xFF)).toShort().toDouble()
+            if (noiseReductionEnabled) sample = noiseReducer.process(sample)
             if (bassLevel > 0) sample = bassFilter(sample)
             if (echoLevel > 0) sample = echoEffect(sample)
 

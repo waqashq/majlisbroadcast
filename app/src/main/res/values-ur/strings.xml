@@ -168,4 +168,7 @@
     <string name="btn_stop_short">روکیں</string>
     <string name="cd_mic_mute">مائیک خاموش کریں</string>
     <string name="listener_data_line">سامعین: %1$d   ·   %2$.1f MB (%3$s)</string>
+    <!-- Phase 11h: mic noise reduction (high-pass + gentle gate) -->
+    <string name="fx_noise_label">شور کم کریں</string>
+    <string name="fx_noise_hint">گونج، کھڑکھڑاہٹ اور پس منظر کی آواز کم کرتا ہے</string>
 </resources>

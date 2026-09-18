@@ -297,6 +297,31 @@ OFFLINE. Note `dumpsys activity services <pkg>` substring-matches other
 apps' services, so a "service still running" count from it can be a false
 positive -- confirm against the on-screen state.
 
+Phase 11h, at the user's request: mic noise reduction, as one On/Off
+switch in the Voice Effects card -- default ON, remembered across launches
+(`AppSettings.noiseReduction`, key `audio_noise_reduction`). The new
+`NoiseReducer` is two conservative stages run per sample, before the voice
+effects and the gain stage: (1) a 4th-order high-pass at 85Hz (two cascaded
+RBJ Butterworth biquads) that removes fan/AC rumble and handling thumps;
+(2) a gentle gate that tracks the room's own noise floor and fades gaps
+between sentences down by at most -12dB -- never to silence -- with a 5ms
+attack (word starts are not clipped) and 250ms release (no pumping). It is
+shared by the live path (`BroadcastEngine`, toggled live via a new
+`ACTION_SET_NOISE_REDUCTION` service action) and the idle `MicPreview`, so
+the bars show what listeners will hear. Deliberately NOT used: Android's
+own `NoiseSuppressor` (part of the telephony processing chain the
+UNPROCESSED capture source avoids on purpose), spectral subtraction
+(artifact-prone, wants tuning against a real recording of the room), and
+RNNoise (needs NDK/native builds).
+
+The DSP was checked before wiring it in, by mirroring it in JS and feeding
+synthetic signals: 50Hz rumble -19.4dB (a single stage managed only
+-9.7dB, hence the cascade); steady hiss -11.9dB; speech inside a talking
+burst -0.2dB (i.e. untouched); a 0.5s gap between bursts ~-4dB (the slow
+release is still easing down, by design); word onsets -1.7dB over the
+first 20ms. Not yet verified: how it sounds on real speech in the actual
+hall.
+
 Verified: clean build + lint, the dex checked for absence of the temporary
 demo-feed code used for screenshots, and the colour-zone mapping checked
 against bar heights. NOT verified on screen: the meter colours and the

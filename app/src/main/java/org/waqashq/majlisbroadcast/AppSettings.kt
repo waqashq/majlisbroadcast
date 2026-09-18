@@ -34,6 +34,7 @@ object AppSettings {
     private const val KEY_LOGIN_PASSWORD = "app_login_password"
     private const val KEY_BASS_LEVEL = "audio_bass_level"
     private const val KEY_ECHO_LEVEL = "audio_echo_level"
+    private const val KEY_NOISE_REDUCTION = "audio_noise_reduction"
 
     const val DEFAULT_SAMPLE_RATE = 44_100
     const val DEFAULT_BIT_RATE_BPS = 64_000
@@ -119,6 +120,13 @@ object AppSettings {
      */
     fun bassLevel(context: Context): Int = prefs(context).getInt(KEY_BASS_LEVEL, 0).coerceIn(0, 100)
     fun echoLevel(context: Context): Int = prefs(context).getInt(KEY_ECHO_LEVEL, 0).coerceIn(0, 100)
+
+    /** Phase 11h: mic noise reduction. Defaults ON -- it is conservative enough to leave on always. */
+    fun noiseReduction(context: Context): Boolean = prefs(context).getBoolean(KEY_NOISE_REDUCTION, true)
+
+    fun saveNoiseReduction(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_NOISE_REDUCTION, enabled).apply()
+    }
 
     fun saveBassLevel(context: Context, level: Int) {
         prefs(context).edit().putInt(KEY_BASS_LEVEL, level.coerceIn(0, 100)).apply()

@@ -168,4 +168,7 @@
     <string name="btn_stop_short">STOP</string>
     <string name="cd_mic_mute">Mute microphone</string>
     <string name="listener_data_line">Listeners: %1$d   ·   %2$.1f MB (%3$s)</string>
+    <!-- Phase 11h: mic noise reduction (high-pass + gentle gate) -->
+    <string name="fx_noise_label">Noise Reduction</string>
+    <string name="fx_noise_hint">Cuts hum, rumble and background hiss</string>
 </resources>

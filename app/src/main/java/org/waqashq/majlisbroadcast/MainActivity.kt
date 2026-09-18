@@ -81,6 +81,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var bassValueText: TextView
     private lateinit var echoSeekBar: SeekBar
     private lateinit var echoValueText: TextView
+    private lateinit var noiseSwitch: androidx.appcompat.widget.SwitchCompat
     private lateinit var websiteLight: StatusLightView
     private lateinit var websiteStatusText: TextView
 
@@ -496,6 +497,45 @@ class MainActivity : AppCompatActivity() {
         }
         fxCard.addView(fxTitle)
 
+        // ---- Phase 11h: Noise Reduction on/off (high-pass + gentle gate,
+        // see NoiseReducer). Default ON, remembered in AppSettings. Applied
+        // live via BroadcastService while on air; while idle it restarts the
+        // mic preview so the bars immediately reflect the new setting. ----
+        val noiseLabelCol = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            addView(TextView(this@MainActivity).apply {
+                text = getString(R.string.fx_noise_label)
+                textSize = 13f
+                setTextColor(UiTheme.STUDIO_TEXT_PRIMARY)
+            })
+            addView(TextView(this@MainActivity).apply {
+                text = getString(R.string.fx_noise_hint)
+                textSize = 11f
+                setTextColor(UiTheme.STUDIO_TEXT_MUTED)
+            })
+        }
+        noiseSwitch = androidx.appcompat.widget.SwitchCompat(this).apply {
+            isChecked = AppSettings.noiseReduction(this@MainActivity)
+            thumbTintList = ColorStateList(
+                arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
+                intArrayOf(UiTheme.PRIMARY_GREEN, UiTheme.STUDIO_TEXT_SECONDARY)
+            )
+            trackTintList = ColorStateList(
+                arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
+                intArrayOf(androidx.core.graphics.ColorUtils.setAlphaComponent(UiTheme.PRIMARY_GREEN, 0x88), UiTheme.STUDIO_DIVIDER)
+            )
+            contentDescription = getString(R.string.fx_noise_label)
+            setOnCheckedChangeListener { _, checked -> onNoiseReductionToggled(checked) }
+        }
+        val noiseRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(noiseLabelCol)
+            addView(noiseSwitch)
+        }
+        fxCard.addView(noiseRow, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 24 })
+
         val bassLabelRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         val bassLabel = TextView(this).apply {
             text = getString(R.string.fx_bass_label)
@@ -744,9 +784,20 @@ class MainActivity : AppCompatActivity() {
     private fun startMicPreview() {
         if (isLive || micPreview != null || previewMuted) return
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) return
-        micPreview = MicPreview(AppSettings.sampleRate(this)) { bands ->
+        micPreview = MicPreview(AppSettings.sampleRate(this), AppSettings.noiseReduction(this)) { bands ->
             if (!isLive) visualizer.pushSpectrum(bands)
         }.also { it.start() }
+    }
+
+    /** Phase 11h: remember the choice, apply it live if on air, or rebuild the preview with it if idle. */
+    private fun onNoiseReductionToggled(enabled: Boolean) {
+        AppSettings.saveNoiseReduction(this, enabled)
+        if (isLive) {
+            BroadcastService.setNoiseReduction(this, enabled)
+        } else if (micPreview != null) {
+            stopMicPreview()
+            startMicPreview()
+        }
     }
 
     private fun stopMicPreview() {
