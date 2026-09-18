@@ -121,6 +121,16 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
         @Volatile var bytesUploadedTotal: Long = 0
             private set
         fun start(context: Context) {
+            // Phase 11o: mark CONNECTING right here, before the service is
+            // even dispatched. Until this existed, `state` still held the
+            // PREVIOUS session's STOPPED (or IDLE on a fresh launch) for the
+            // tens of milliseconds it takes the service to start, and
+            // MainActivity's 300ms poller could read that first and conclude
+            // the broadcast had already ended -- dropping back to idle, so
+            // no "Broadcast Started" dialog, REC greyed out, and the mic
+            // preview restarting right on top of the engine's own capture.
+            // A pure race, hence "only sometimes".
+            state = BroadcastEngine.State.CONNECTING
             val intent = Intent(context, BroadcastService::class.java)
             context.startForegroundService(intent)
         }

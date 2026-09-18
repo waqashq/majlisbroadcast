@@ -423,6 +423,19 @@ debug log now records the mic source each session got ("Mic source:
 UNPROCESSED" / "CAMCORDER (fallback)") and, every 30s while live, "Noise
 reduction ON/OFF: room turned down N% of the time, noise floor F".
 
+Phase 11o, "sometimes pressing LIVE shows no Broadcast Started dialog and
+REC stays unavailable": a start-up race, not a network problem.
+`BroadcastService.start()` only fired an Intent, so the static `state`
+still held the previous session's STOPPED (or IDLE on a fresh launch) for
+the tens of ms until the service ran. MainActivity starts its 300ms
+livePoller in the same breath, and pollLiveState() treats STOPPED/IDLE as
+"the session ended": isLive back to false (REC disabled, no dialog since
+that watcher waits for LIVE) and startMicPreview() again -- which then
+grabs the mic on top of the engine's own capture, so the connect could
+fail outright. Whichever ran first decided the outcome, hence "only
+sometimes". Fixed by setting state = CONNECTING synchronously inside
+start(), before the service is dispatched.
+
 Verified: clean build + lint, the dex checked for absence of the temporary
 demo-feed code used for screenshots, and the colour-zone mapping checked
 against bar heights. NOT verified on screen: the meter colours and the
