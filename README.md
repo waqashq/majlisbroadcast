@@ -411,6 +411,18 @@ quieter); synthetic benches: silence after switching ON / after talking
 -17dB, speech -0.1dB. Also removed a duplicated "Going live with noise
 reduction" debug-log line.
 
+Phase 11n, "once, noise reduction ON but the recording wasn't reduced;
+off/on and retry fixed it": a one-off with no log to read (the debug log
+is in memory and the app had since closed). One real race found and fixed:
+Go Live stopped the mic preview without waiting, so the broadcast could
+open the mic while the preview thread was still mid-read holding it --
+risking the CAMCORDER fallback source, whose phone-side AGC can pump room
+noise up past the gate's threshold. Go Live now waits (up to 500ms, in
+practice ~100ms) for the preview to release the mic. For next time, the
+debug log now records the mic source each session got ("Mic source:
+UNPROCESSED" / "CAMCORDER (fallback)") and, every 30s while live, "Noise
+reduction ON/OFF: room turned down N% of the time, noise floor F".
+
 Verified: clean build + lint, the dex checked for absence of the temporary
 demo-feed code used for screenshots, and the colour-zone mapping checked
 against bar heights. NOT verified on screen: the meter colours and the

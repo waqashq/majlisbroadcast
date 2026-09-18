@@ -144,6 +144,21 @@ class NoiseReducer(sampleRate: Int) {
     private var holdLeft = 0
     private var highGain = 1.0
     private var lowGain = 1.0
+    // Diagnostics only (Phase 11n), read and cleared by statsAndReset().
+    private var statSamples = 0L
+    private var statGatedSamples = 0L
+
+    /**
+     * One-line summary since the last call, for the debug log: how much of
+     * the time the gate was turning the room down, and the noise floor it
+     * settled on (in the detector's 16-bit units; MIN_FLOOR is the lowest).
+     */
+    fun statsAndReset(): String {
+        val gatedPct = if (statSamples > 0) statGatedSamples * 100 / statSamples else 0
+        statSamples = 0
+        statGatedSamples = 0
+        return "room turned down ${gatedPct}% of the time, noise floor ${noiseFloor.toInt()}"
+    }
 
     /** One 16-bit sample in, processed sample out (same scale). */
     fun process(sample: Double): Double {
@@ -173,6 +188,9 @@ class NoiseReducer(sampleRate: Int) {
             holdLeft--
             open = true
         }
+
+        statSamples++
+        if (!open) statGatedSamples++
 
         // --- two-band gate ---
         val highTarget = if (open) 1.0 else HIGH_DEPTH_GAIN

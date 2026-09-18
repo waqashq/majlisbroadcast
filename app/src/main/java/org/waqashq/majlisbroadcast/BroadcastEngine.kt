@@ -408,6 +408,7 @@ class BroadcastEngine(
     }
 
     private var lastLevelReportMs = 0L
+    private var lastNoiseStatsMs = 0L
     // Phase 11e: the visualizer's per-band levels. Analyzed here, on the
     // capture thread, only when a level report is actually due (~150ms), so
     // the FFT cost is bounded and the reused buffers never allocate.
@@ -422,6 +423,17 @@ class BroadcastEngine(
     private fun reportLevel(level: Int, clipped: Boolean, pcm: ByteArray? = null, pcmBytes: Int = 0) {
         if (clipped) clippedSinceReport = true
         val now = SystemClock.elapsedRealtime()
+        // Phase 11n: every 30s, how much of that time the noise reducer was
+        // actually turning the room down -- so a "it didn't reduce" moment
+        // can be read back from the debug log afterwards.
+        if (now - lastNoiseStatsMs >= 30_000L) {
+            if (lastNoiseStatsMs != 0L) {
+                DebugLog.log("Noise reduction " + (if (noiseReductionEnabled) "ON" else "OFF") + ": " + noiseReducer.statsAndReset())
+            } else {
+                noiseReducer.statsAndReset()
+            }
+            lastNoiseStatsMs = now
+        }
         if (now - lastLevelReportMs < 150) return
         lastLevelReportMs = now
         val clippedToReport = clippedSinceReport
@@ -578,6 +590,10 @@ class BroadcastEngine(
                     AudioFormat.ENCODING_PCM_16BIT, bufferSize
                 )
                 if (record.state == AudioRecord.STATE_INITIALIZED) {
+                    // Phase 11n: CAMCORDER is the fallback and brings the
+                    // phone's own processing (AGC can pump up room noise), so
+                    // record which one this session actually got.
+                    DebugLog.log("Mic source: " + if (source == MediaRecorder.AudioSource.UNPROCESSED) "UNPROCESSED" else "CAMCORDER (fallback)")
                     pinToBuiltInMic(record)
                     return record
                 }

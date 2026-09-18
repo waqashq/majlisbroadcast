@@ -91,11 +91,19 @@ class MicPreview(
         }, "MicPreview").apply { start() }
     }
 
-    /** Stops capture and releases the mic. Safe to call repeatedly. */
-    fun stop() {
+    /**
+     * Stops capture and releases the mic. Safe to call repeatedly. With
+     * [waitMs] > 0, waits up to that long for the capture thread to finish
+     * its current read and release the mic (one read is ~100ms at most).
+     */
+    fun stop(waitMs: Long = 0L) {
         running = false
-        thread?.interrupt()
+        val t = thread
         thread = null
+        t?.interrupt()
+        if (waitMs > 0 && t != null) {
+            try { t.join(waitMs) } catch (_: InterruptedException) {}
+        }
     }
 
     /** Noise reduction (if on) then the same fixed gain as BroadcastEngine. Returns true if anything clipped. */

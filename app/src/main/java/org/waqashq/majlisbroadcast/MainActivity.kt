@@ -789,8 +789,9 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun stopMicPreview() {
-        micPreview?.stop()
+    /** [waitForRelease]: block briefly until the preview has really let go of the mic (before going live). */
+    private fun stopMicPreview(waitForRelease: Boolean = false) {
+        micPreview?.stop(if (waitForRelease) 500L else 0L)
         micPreview = null
         if (!isLive) visualizer.reset()
     }
@@ -1008,7 +1009,11 @@ class MainActivity : AppCompatActivity() {
         DebugLog.log("Go Live tapped")
         // Release the mic first: only one capture can own it, so the preview
         // has to be gone before BroadcastService opens its own AudioRecord.
-        stopMicPreview()
+        // Phase 11n: and actually wait for it -- stop() used to return while
+        // the preview thread was still mid-read holding the mic, so the
+        // broadcast could open the mic too early and not get the clean
+        // UNPROCESSED source.
+        stopMicPreview(waitForRelease = true)
         // Snapshot now, not just at buildUi() time -- this is the
         // exact value BroadcastService/BroadcastEngine will read a
         // moment from now, so the meter reflects the actual running
