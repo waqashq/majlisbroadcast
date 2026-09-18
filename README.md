@@ -374,6 +374,25 @@ confirmed by code review); the debug log now records "Noise reduction
 switched ON/OFF" and "Going live with noise reduction ON/OFF" so the state
 can be confirmed after a session.
 
+Phase 11l, "the noise reduction toggle sometimes works, sometimes doesn't":
+two real bugs. (1) The gate's floor was capped ~22dB below "recent speech",
+but with nobody talking "recent speech" is just the room noise's own peaks,
+so the cap pinned the floor under the noise and the gate stayed open. And
+every switch-ON reset the reducer, so right after switching ON in a quiet
+room it did nothing (measured: only the -3dB rumble filter), and in any
+pause longer than ~2s it stopped reducing. Whether it "worked" depended on
+whether you'd just been talking. The cap is removed: on 25s of unbroken
+speech it protected nothing the minimum-statistics floor didn't already.
+The opening threshold went from +9.5dB to +12dB so room-noise swells don't
+poke through. The reducer also now runs all the time (switch only picks
+its output), so switching ON takes effect at once with an already-learned
+floor. (2) While idle, the toggle stopped the mic preview and immediately
+opened a new one; the old capture often hadn't released the mic yet, so
+the new one failed silently. The preview is now switched in place.
+Measured: silence right after switching ON -15dB (-12 gate, -3 rumble
+filter) within ~2s, and held however long the pause; speech -0.1dB, soft
+syllables -0.1dB, quiet voice unchanged.
+
 Verified: clean build + lint, the dex checked for absence of the temporary
 demo-feed code used for screenshots, and the colour-zone mapping checked
 against bar heights. NOT verified on screen: the meter colours and the

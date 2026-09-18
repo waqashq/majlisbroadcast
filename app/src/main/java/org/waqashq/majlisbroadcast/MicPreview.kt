@@ -26,8 +26,13 @@ import android.os.Process
  */
 class MicPreview(
     private val sampleRate: Int,
-    /** Phase 11h: same NoiseReducer as the live path, so the bars match what listeners will hear. */
-    private val noiseReduction: Boolean,
+    /**
+     * Phase 11h: same NoiseReducer as the live path, so the bars match what
+     * listeners will hear. Phase 11l: switchable in place -- the toggle used
+     * to stop and immediately reopen the mic, and the new capture often
+     * failed silently because the old one hadn't let go of the mic yet.
+     */
+    noiseReduction: Boolean,
     /** bands + whether any sample hit the ceiling since the last callback (Phase 11k). */
     private val onBands: (IntArray, Boolean) -> Unit
 ) {
@@ -44,6 +49,7 @@ class MicPreview(
     private val analyzer = SpectrumAnalyzer(sampleRate, SpectrumView.BAND_COUNT)
     private val bands = IntArray(SpectrumView.BAND_COUNT)
     private val noiseReducer = NoiseReducer(sampleRate)
+    @Volatile var noiseReduction = noiseReduction
 
     /** No-op if already running. Caller must hold RECORD_AUDIO. */
     fun start() {
@@ -98,7 +104,9 @@ class MicPreview(
         var i = 0
         while (i + 1 < byteCount) {
             var sample = ((buf[i + 1].toInt() shl 8) or (buf[i].toInt() and 0xFF)).toShort().toDouble()
-            if (noiseReduction) sample = noiseReducer.process(sample)
+            // Always run the reducer so its noise floor stays learned (see BroadcastEngine).
+            val denoised = noiseReducer.process(sample)
+            if (noiseReduction) sample = denoised
             val raw = (sample * GAIN_FACTOR).toInt()
             if (raw > Short.MAX_VALUE || raw < Short.MIN_VALUE) clipped = true
             val boosted = raw.coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())

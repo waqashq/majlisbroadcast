@@ -29,6 +29,18 @@ import kotlin.math.sin
  * -6.7dB on fluctuating room noise, speech still -0.1dB, soft syllables
  * untouched even for a voice 12dB quieter.
  *
+ * Phase 11l ("the toggle sometimes works, sometimes doesn't"): a ~22dB
+ * "speech cap" on the floor switched the gate off whenever nobody had spoken
+ * in the last couple of seconds -- in pure room noise "recent speech" is
+ * just the noise's own peaks, so the cap pinned the floor under the noise.
+ * Switching ON (which also reset everything) or pausing longer than ~2s
+ * meant no reduction at all. The cap is gone: on 25s of unbroken speech it
+ * protected nothing the minimum-statistics floor didn't already. The
+ * opening threshold moved to +12dB so room-noise swells don't poke through.
+ * Measured: silence right after switching ON -15dB (-12 gate, -3 rumble
+ * filter) within ~2s, staying there however long the pause; speech -0.1dB,
+ * soft syllables -0.1dB, a quiet voice unchanged.
+ *
  * Phase 11j ("still a little too much"): the remaining voice loss came
  * almost entirely from the high-pass, so it moved 60Hz -> 40Hz; the gate also
  * got a 500ms hold and opens at +4dB instead of +6dB. Measured now: speech
@@ -48,8 +60,7 @@ import kotlin.math.sin
  *  2. GENTLE GATE with a "minimum statistics" noise floor: the floor is the
  *     QUIETEST envelope seen over the last ~2s (4 blocks of 500ms), so it
  *     finds the room's real background level from natural breathing pauses
- *     and cannot creep up during speech. As a second guard it is also
- *     capped ~22dB below recent speech. Gaps are faded down by at most -12dB
+ *     and cannot creep up during speech. Gaps are faded down by at most -12dB
  *     (never to silence), with a 3ms attack, a 300ms hold so soft word
  *     endings aren't dipped, and a 250ms release so it never pumps.
  *
@@ -67,21 +78,17 @@ class NoiseReducer(sampleRate: Int) {
         const val HOLD_MS = 300.0
         /**
          * Gate opens once the signal is this far above the noise floor
-         * (~+9.5dB). Phase 11k: 1.6 (+4dB) was too close -- the floor is the
+         * (+12dB; Phase 11l, was 3.0 / +9.5dB). Phase 11k: 1.6 (+4dB) was too close -- the floor is the
          * MINIMUM of the noise envelope, so ordinary noise swells crossed it
          * and held the gate open; on realistic room noise pauses only eased
          * -1.9dB, and not at all for a quiet talker. Speech sits well above
          * +9.5dB, so this costs the voice nothing (measured -0.1dB).
          */
-        const val OPEN_RATIO = 3.0
+        const val OPEN_RATIO = 4.0
         /** Deepest attenuation while gated: -12dB. Never silence. */
         const val GATE_DEPTH_GAIN = 0.25
         const val BLOCK_MS = 500.0
         const val BLOCK_COUNT = 4
-        /** How long "recent speech level" takes to decay, for the floor cap. */
-        const val SPEECH_DECAY_MS = 3000.0
-        /** Noise floor may never exceed this fraction of recent speech (~-22dB). */
-        const val SPEECH_CAP = 0.08
     }
 
     // High-pass biquad (RBJ) coefficients and state.
@@ -98,7 +105,6 @@ class NoiseReducer(sampleRate: Int) {
     private val envCoeff = exp(-1.0 / (sampleRate * ENVELOPE_MS / 1000.0))
     private val attackCoeff = exp(-1.0 / (sampleRate * ATTACK_MS / 1000.0))
     private val releaseCoeff = exp(-1.0 / (sampleRate * RELEASE_MS / 1000.0))
-    private val speechCoeff = exp(-1.0 / (sampleRate * SPEECH_DECAY_MS / 1000.0))
     private val holdSamples = (sampleRate * HOLD_MS / 1000.0).toInt()
     private val blockSamples = (sampleRate * BLOCK_MS / 1000.0).toInt()
 
@@ -108,7 +114,6 @@ class NoiseReducer(sampleRate: Int) {
     private var blockCount = 0
 
     private var envelope = 0.0
-    private var speechLevel = 0.0
     /** 0 = no estimate yet (gate stays open until the first block completes). */
     private var noiseFloor = 0.0
     private var holdLeft = 0
@@ -126,20 +131,6 @@ class NoiseReducer(sampleRate: Int) {
         a2 = (1.0 - alpha) / a0
     }
 
-    /** Clears filter/gate state -- call when capture restarts so stale state can't gate the first word. */
-    fun reset() {
-        x1 = 0.0; x2 = 0.0; y1 = 0.0; y2 = 0.0
-        blockMins.fill(Double.MAX_VALUE)
-        blockMinIndex = 0
-        currentBlockMin = Double.MAX_VALUE
-        blockCount = 0
-        envelope = 0.0
-        speechLevel = 0.0
-        noiseFloor = 0.0
-        holdLeft = 0
-        gain = 1.0
-    }
-
     /** One 16-bit sample in, processed sample out (same scale). */
     fun process(sample: Double): Double {
         // --- stage 1: gentle high-pass ---
@@ -150,7 +141,6 @@ class NoiseReducer(sampleRate: Int) {
         // --- stage 2: gate ---
         val level = abs(hp)
         envelope = if (level > envelope) level else envelope * envCoeff + level * (1 - envCoeff)
-        speechLevel = if (envelope > speechLevel) envelope else speechLevel * speechCoeff
 
         // Minimum statistics: remember the quietest moment of each 500ms
         // block; the floor is the quietest of the last four blocks.
@@ -163,9 +153,6 @@ class NoiseReducer(sampleRate: Int) {
             var minOfBlocks = Double.MAX_VALUE
             for (m in blockMins) if (m < minOfBlocks) minOfBlocks = m
             noiseFloor = if (minOfBlocks == Double.MAX_VALUE) 0.0 else minOfBlocks
-            // Second guard: the floor can never sit within ~22dB of speech.
-            val cap = speechLevel * SPEECH_CAP
-            if (noiseFloor > cap) noiseFloor = cap
         }
 
         var open = noiseFloor <= 0.0 || envelope > noiseFloor * OPEN_RATIO

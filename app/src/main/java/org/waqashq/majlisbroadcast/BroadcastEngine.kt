@@ -207,12 +207,17 @@ class BroadcastEngine(
      * Phase 11h: high-pass + gentle gate on the mic input (NoiseReducer).
      * Applied before the voice effects and before the gain stage, so what
      * gets boosted is already de-rumbled.
+     *
+     * Phase 11l: the reducer now listens all the time, even while switched
+     * off, so switching it ON takes effect immediately with an
+     * already-learned noise floor. (It used to be reset on every ON, then
+     * sat idle until it had heard speech -- the "sometimes it works"
+     * toggle.) The switch only decides whether its output is used.
      */
     @Volatile private var noiseReductionEnabled = initialNoiseReduction
     private val noiseReducer = NoiseReducer(sampleRate)
 
     fun setNoiseReduction(enabled: Boolean) {
-        if (enabled && !noiseReductionEnabled) noiseReducer.reset()
         noiseReductionEnabled = enabled
     }
 
@@ -547,7 +552,8 @@ class BroadcastEngine(
         var i = 0
         while (i + 1 < byteCount) {
             var sample = ((buf[i + 1].toInt() shl 8) or (buf[i].toInt() and 0xFF)).toShort().toDouble()
-            if (noiseReductionEnabled) sample = noiseReducer.process(sample)
+            val denoised = noiseReducer.process(sample)
+            if (noiseReductionEnabled) sample = denoised
             if (bassLevel > 0) sample = bassFilter(sample)
             if (echoLevel > 0) sample = echoEffect(sample)
 

@@ -774,15 +774,18 @@ class MainActivity : AppCompatActivity() {
         }.also { it.start() }
     }
 
-    /** Phase 11h: remember the choice, apply it live if on air, or rebuild the preview with it if idle. */
+    /**
+     * Phase 11h: remember the choice, apply it live if on air, else to the
+     * idle preview. Phase 11l: the preview is switched in place rather than
+     * stopped and restarted (the restart raced the mic release).
+     */
     private fun onNoiseReductionToggled(enabled: Boolean) {
         AppSettings.saveNoiseReduction(this, enabled)
         DebugLog.log("Noise reduction switched " + if (enabled) "ON" else "OFF")
         if (isLive) {
             BroadcastService.setNoiseReduction(this, enabled)
-        } else if (micPreview != null) {
-            stopMicPreview()
-            startMicPreview()
+        } else {
+            micPreview?.noiseReduction = enabled
         }
     }
 
