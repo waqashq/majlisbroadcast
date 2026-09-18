@@ -393,6 +393,24 @@ Measured: silence right after switching ON -15dB (-12 gate, -3 rumble
 filter) within ~2s, and held however long the pause; speech -0.1dB, soft
 syllables -0.1dB, quiet voice unchanged.
 
+Phase 11m, "more noise now than last time": first test on REAL room audio.
+A temporary, uncommitted build saved 30s of raw idle-preview mic audio
+(15s quiet, 15s talking; nothing broadcast) which was pulled over adb and
+run through the reducer offline. Both 11k and 11l did 0dB on it: 99% of
+that room's noise was rumble at 40-320Hz (fan/AC-type, no hiss at all)
+whose level swung ~30dB several times a second, so a full-band detector
+kept reading the swings as speech. Redesign: the voice detector listens
+only to 300-3000Hz, where speech is strong and that room was near digital
+silence, with an absolute minimum floor so breaths/rustles (peaks 30-80 in
+16-bit units) don't count as speech (hundreds to thousands); the gate is
+now two-band (Linkwitz-Riley split at 300Hz): in gaps the low band drops
+-20dB and the rest -12dB, and during speech both are fully open so the
+voice keeps its low body. Measured on that recording: quiet part -15dB,
+speech untouched except in its real pauses (also with the recording 12dB
+quieter); synthetic benches: silence after switching ON / after talking
+-17dB, speech -0.1dB. Also removed a duplicated "Going live with noise
+reduction" debug-log line.
+
 Verified: clean build + lint, the dex checked for absence of the temporary
 demo-feed code used for screenshots, and the colour-zone mapping checked
 against bar heights. NOT verified on screen: the meter colours and the
