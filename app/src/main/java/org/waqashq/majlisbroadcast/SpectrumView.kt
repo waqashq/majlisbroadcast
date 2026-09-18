@@ -2,6 +2,7 @@ package org.waqashq.majlisbroadcast
 
 import android.content.Context
 import android.graphics.Canvas
+import android.graphics.Color
 import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Shader
@@ -23,9 +24,9 @@ import kotlin.math.abs
  *    meters behave -- snapping down looks nervous;
  *  - light smoothing across neighbouring bars, so the outline flows as one
  *    curve instead of a picket fence;
- *  - rounded caps and a vertical gradient per bar (brighter at the top),
- *    which is the one place this screen's otherwise-flat theme bends, for
- *    the same reason as the indicator lamps.
+ *  - square tops (Phase 11g) over a level-zone gradient, which is the one
+ *    place this screen's otherwise-flat theme bends, for the same reason as
+ *    the indicator lamps.
  */
 class SpectrumView @JvmOverloads constructor(
     context: Context,
@@ -87,15 +88,21 @@ class SpectrumView @JvmOverloads constructor(
         // actually reaches -- a quiet bar is entirely green, only a loud one
         // shows red at its tip. (Colouring by frequency instead would look
         // busier and means nothing; zone colouring tells you about level.)
+        // Phase 11g: more shades, and they arrive sooner. Light green ->
+        // mid green -> deep green gives the bars visible depth instead of
+        // one flat tone, and amber/red now start lower (amber from ~70% of
+        // the bar height, red from ~88%) so normal speech shows colour
+        // rather than only shouting.
         barGradient = LinearGradient(
             0f, 0f, 0f, h.toFloat(),
             intArrayOf(
                 UiTheme.METER_RED,
                 UiTheme.METER_AMBER,
+                UiTheme.METER_GREEN_LIGHT,
                 UiTheme.METER_GREEN,
-                ColorUtils.blendARGB(UiTheme.METER_GREEN, UiTheme.STUDIO_INSET_BG, 0.45f)
+                ColorUtils.blendARGB(UiTheme.METER_GREEN, Color.BLACK, 0.45f)
             ),
-            floatArrayOf(0f, 0.16f, 0.42f, 1f),
+            floatArrayOf(0f, 0.12f, 0.30f, 0.62f, 1f),
             Shader.TileMode.CLAMP
         )
     }
@@ -120,8 +127,7 @@ class SpectrumView @JvmOverloads constructor(
 
         val gap = w * 0.012f
         val barWidth = (w - gap * (BAND_COUNT - 1)) / BAND_COUNT
-        val radius = barWidth / 2f
-        val minHeight = (h * MIN_FRACTION).coerceAtLeast(barWidth * 0.6f)
+        val minHeight = (h * MIN_FRACTION).coerceAtLeast(barWidth * 0.5f)
 
         barPaint.shader = barGradient
         for (i in 0 until BAND_COUNT) {
@@ -129,8 +135,9 @@ class SpectrumView @JvmOverloads constructor(
             val barHeight = minHeight + (h - minHeight) * level
             val left = i * (barWidth + gap)
             // Bottom-anchored, like every bar meter: grows upward from the
-            // baseline rather than out from the middle.
-            canvas.drawRoundRect(left, h - barHeight, left + barWidth, h, radius, radius, barPaint)
+            // baseline rather than out from the middle. Square tops (Phase
+            // 11g, was rounded) -- sharp corners read as an instrument.
+            canvas.drawRect(left, h - barHeight, left + barWidth, h, barPaint)
         }
         barPaint.shader = null
     }

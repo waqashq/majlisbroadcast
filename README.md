@@ -270,6 +270,33 @@ is in pixels, not a fraction of the bounds. The long `btn_go_live` /
 reports them) but kept in both languages in case the long form is wanted
 back.
 
+Phase 11g, at the user's request: (1) square bar tops instead of rounded.
+(2) Nothing on the screen moves when going live or stopping any more --
+the elapsed clock and the disconnected icon now share one fixed-height
+`statusSlot` (FrameLayout, both centred, INVISIBLE rather than GONE), and
+the listener/data readout became a single line that is only ever INVISIBLE
+while idle, so its row stays reserved. `dataUsageText` was folded into that
+line and removed. (3) LIVE/REC buttons 30% smaller (112dp -> 78dp).
+(4) Visualizer 30% shorter (240px -> 168px). (5) More shades and earlier
+colour: light green -> mid green -> deep green plus amber from ~70% and red
+from ~88% of bar height (was amber ~85%/red ~95%), so normal speech shows
+colour instead of only shouting. (6) Mute works while idle: since
+`BroadcastService` applies mute to the running engine and there is no engine
+when idle, muting idle stops the preview capture instead, turns the mic icon
+red, and is carried into the next broadcast via `pendingMuteOnLive` (applied
+from `pollLiveState()` once the state actually reaches LIVE, because the
+service ignores mute intents until its engine exists). Stopping a broadcast
+resets it to unmuted.
+
+Verified on the emulator: the anti-shift work was checked by measuring
+landmark y-positions in idle vs live screenshots (bars, Voice Effects
+title, both sliders and Share Event all identical, the only differences
+being in-place colour/visibility changes), and idle mute by confirming the
+mic glyph flips grey -> red -> grey on tap while the screen still reads
+OFFLINE. Note `dumpsys activity services <pkg>` substring-matches other
+apps' services, so a "service still running" count from it can be a false
+positive -- confirm against the on-screen state.
+
 Verified: clean build + lint, the dex checked for absence of the temporary
 demo-feed code used for screenshots, and the colour-zone mapping checked
 against bar heights. NOT verified on screen: the meter colours and the

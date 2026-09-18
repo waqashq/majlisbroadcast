@@ -50,6 +50,7 @@ object UiTheme {
     // conventional green/amber/red of a hardware level meter, slightly
     // brighter than the flat UI accents so the meter reads as an
     // instrument rather than as more chrome.
+    const val METER_GREEN_LIGHT = 0xFF8AF0B4.toInt()
     const val METER_GREEN = 0xFF2FD67E.toInt()
     const val METER_AMBER = 0xFFF2B33D.toInt()
     const val METER_RED = 0xFFF0483C.toInt()

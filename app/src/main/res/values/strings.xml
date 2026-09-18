@@ -167,4 +167,5 @@
     <string name="btn_rec_short">REC</string>
     <string name="btn_stop_short">STOP</string>
     <string name="cd_mic_mute">Mute microphone</string>
+    <string name="listener_data_line">Listeners: %1$d   ·   %2$.1f MB (%3$s)</string>
 </resources>

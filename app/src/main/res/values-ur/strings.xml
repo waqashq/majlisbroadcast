@@ -167,4 +167,5 @@
     <string name="btn_rec_short">ریکارڈ</string>
     <string name="btn_stop_short">روکیں</string>
     <string name="cd_mic_mute">مائیک خاموش کریں</string>
+    <string name="listener_data_line">سامعین: %1$d   ·   %2$.1f MB (%3$s)</string>
 </resources>

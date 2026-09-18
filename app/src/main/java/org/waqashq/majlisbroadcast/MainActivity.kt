@@ -19,6 +19,7 @@ import android.provider.Settings
 import android.view.Gravity
 import android.view.View
 import android.widget.Button
+import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -76,7 +77,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var micClippingText: TextView
     private lateinit var listenerCountText: TextView
     private lateinit var shareButton: LinearLayout
-    private lateinit var dataUsageText: TextView
     private lateinit var bassSeekBar: SeekBar
     private lateinit var bassValueText: TextView
     private lateinit var echoSeekBar: SeekBar
@@ -101,6 +101,12 @@ class MainActivity : AppCompatActivity() {
     // broadcasting so the mic can be checked before going live. Holds the
     // mic, so it must be released before BroadcastService starts.
     private var micPreview: MicPreview? = null
+    // Phase 11g: mute now works while idle too. BroadcastService applies mute
+    // to the running engine, so with nothing live there is no engine to tell:
+    // muting while idle simply stops the preview capture, and the choice is
+    // carried into the broadcast once the engine exists (pendingMuteOnLive).
+    private var previewMuted = false
+    private var pendingMuteOnLive = false
     private var roundButtonSizePx = 0
     private var isLive = false
     // Phase 9: set from the "Go Live" shortcut's intent extra, consumed
@@ -327,9 +333,10 @@ class MainActivity : AppCompatActivity() {
         // Phase 11f: the two primary controls are round domed buttons side
         // by side (LIVE / REC) instead of two stacked full-width pills.
         // Short labels because a circle has far less room than a pill.
-        roundButtonSizePx = (112 * resources.displayMetrics.density).toInt()
+        // Phase 11g: 30% smaller than 112dp, per request.
+        roundButtonSizePx = (78 * resources.displayMetrics.density).toInt()
         goLiveButton = Button(this).apply {
-            textSize = 19f
+            textSize = 15f
             setTypeface(typeface, Typeface.BOLD)
             isAllCaps = false
             setPadding(0, 0, 0, 0)
@@ -342,7 +349,7 @@ class MainActivity : AppCompatActivity() {
         goLiveButton.setOnClickListener { onGoLiveClicked() }
 
         recordButton = Button(this).apply {
-            textSize = 17f
+            textSize = 14f
             setTypeface(typeface, Typeface.BOLD)
             isAllCaps = false
             setPadding(0, 0, 0, 0)
@@ -395,7 +402,7 @@ class MainActivity : AppCompatActivity() {
         // the old 40px level strip -- the height is what makes it read as a
         // visualizer rather than a thin meter line.
         visualizer = SpectrumView(this).apply {
-            layoutParams = LinearLayout.LayoutParams(0, 240, 1f).apply {
+            layoutParams = LinearLayout.LayoutParams(0, 168, 1f).apply {
                 marginEnd = 16
             }
         }
@@ -421,8 +428,27 @@ class MainActivity : AppCompatActivity() {
             visibility = View.INVISIBLE
         }
 
+        // Phase 11g: the elapsed clock (live) and the disconnected icon
+        // (idle) sit in ONE fixed-height slot, both centred, so swapping
+        // between them cannot nudge anything above or below -- the screen
+        // stayed still complaint. Height is set from the taller of the two.
+        val statusSlot = FrameLayout(this).apply {
+            addView(
+                disconnectedIcon,
+                FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT
+                ).apply { gravity = Gravity.CENTER }
+            )
+            addView(
+                elapsedText,
+                FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT
+                ).apply { gravity = Gravity.CENTER }
+            )
+        }
+
         listOf(
-            indicators, latencyRow, disconnectedIcon, elapsedText, statusSubtitle,
+            indicators, latencyRow, statusSlot, statusSubtitle,
             buttonRow, meterRow, micClippingText
         ).forEach {
             card.addView(
@@ -439,8 +465,12 @@ class MainActivity : AppCompatActivity() {
         // Explicit size: the loop above adds every card child with
         // WRAP_CONTENT params, which would otherwise leave this at the
         // drawable's own 48dp and look lost in the space it's filling.
-        val discSize = (66 * resources.displayMetrics.density).toInt()
-        disconnectedIcon.layoutParams = LinearLayout.LayoutParams(discSize, discSize).apply { topMargin = 24 }
+        val discSize = (56 * resources.displayMetrics.density).toInt()
+        disconnectedIcon.layoutParams = FrameLayout.LayoutParams(discSize, discSize).apply { gravity = Gravity.CENTER }
+        // Fixed height, comfortably fitting both the 46sp clock and the icon.
+        statusSlot.layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, (76 * resources.displayMetrics.density).toInt()
+        ).apply { topMargin = 20 }
         // Full card width so the two indicator chips inside can split it in half.
         indicators.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 20 }
         buttonRow.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 40 }
@@ -543,14 +573,9 @@ class MainActivity : AppCompatActivity() {
 
         // ---- Listeners + Share (below the card) ----
         listenerCountText = TextView(this).apply {
-            textSize = 18f
+            textSize = 15f
             setTypeface(typeface, Typeface.BOLD)
             setTextColor(UiTheme.STUDIO_ON_AIR_GREEN)
-            gravity = Gravity.CENTER
-        }
-        dataUsageText = TextView(this).apply {
-            textSize = 12f
-            setTextColor(UiTheme.STUDIO_TEXT_MUTED)
             gravity = Gravity.CENTER
         }
         // Solid fill (distinct from the outline style used elsewhere), per
@@ -586,13 +611,13 @@ class MainActivity : AppCompatActivity() {
         // above (was 40). The listener/data rows are hidden entirely while
         // not live (see updateGoLiveButtonStyle) -- they were blank then
         // anyway, and left a large empty gap above Share Event.
+        // Phase 11g: listeners + data on ONE line, and only ever INVISIBLE
+        // (never GONE) while idle -- its row stays reserved so nothing below
+        // it moves when going live or stopping. dataUsageText is folded into
+        // this line and no longer added to the layout.
         scrollContent.addView(
             listenerCountText,
-            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 28 }
-        )
-        scrollContent.addView(
-            dataUsageText,
-            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 6 }
+            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 20 }
         )
         scrollContent.addView(
             shareButton,
@@ -634,13 +659,14 @@ class MainActivity : AppCompatActivity() {
         goLiveButton.setTextColor(if (isLive) UiTheme.STUDIO_TEXT_PRIMARY else UiTheme.STUDIO_BG)
         // Called on every idle<->live transition, so the live-only rows
         // below the voice effects card are shown/hidden here too.
-        val liveOnly = if (isLive) View.VISIBLE else View.GONE
-        listenerCountText.visibility = liveOnly
-        dataUsageText.visibility = liveOnly
-        // The elapsed clock and the disconnected icon share the same slot in
-        // the card: exactly one of them is visible at any time.
-        elapsedText.visibility = liveOnly
-        disconnectedIcon.visibility = if (isLive) View.GONE else View.VISIBLE
+        // INVISIBLE, not GONE: the row keeps its space so the Share button
+        // and everything else stays put across live/idle transitions.
+        listenerCountText.visibility = if (isLive) View.VISIBLE else View.INVISIBLE
+        // The elapsed clock and the disconnected icon live in the same
+        // fixed-height slot (statusSlot), so swapping them cannot move
+        // anything else on the screen.
+        elapsedText.visibility = if (isLive) View.VISIBLE else View.INVISIBLE
+        disconnectedIcon.visibility = if (isLive) View.INVISIBLE else View.VISIBLE
     }
 
     private fun updateRecordButtonStyle() {
@@ -700,7 +726,8 @@ class MainActivity : AppCompatActivity() {
         val micColor = when {
             isLiveState && (callMuted || manualMuted) -> UiTheme.STUDIO_STOP_RED
             isLiveState -> UiTheme.STUDIO_ON_AIR_GREEN
-            else -> UiTheme.STUDIO_TEXT_MUTED
+            previewMuted -> UiTheme.STUDIO_STOP_RED
+            else -> UiTheme.STUDIO_TEXT_SECONDARY
         }
         micIcon.setColorFilter(micColor)
         latencyIcon.setColorFilter(if (isLiveState) UiTheme.STUDIO_ON_AIR_GREEN else UiTheme.STUDIO_TEXT_MUTED)
@@ -715,7 +742,7 @@ class MainActivity : AppCompatActivity() {
      * mic permission, or if already running.
      */
     private fun startMicPreview() {
-        if (isLive || micPreview != null) return
+        if (isLive || micPreview != null || previewMuted) return
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) return
         micPreview = MicPreview(AppSettings.sampleRate(this)) { bands ->
             if (!isLive) visualizer.pushSpectrum(bands)
@@ -926,9 +953,9 @@ class MainActivity : AppCompatActivity() {
             elapsedText.text = ""
             latencyText.text = getString(R.string.latency_unavailable)
             listenerCountText.text = getString(R.string.listener_count_unavailable)
-            dataUsageText.text = ""
             visualizer.reset()
             uiHandler.removeCallbacks(livePoller)
+            previewMuted = false
             startMicPreview()
             awaitStateAndShowDialog(
                 setOf(BroadcastEngine.State.STOPPED, BroadcastEngine.State.IDLE),
@@ -947,6 +974,9 @@ class MainActivity : AppCompatActivity() {
         // moment from now, so the meter reflects the actual running
         // session even if Settings was changed since the app opened.
         bitrateText.text = currentBitrateLabel()
+        // Carried, not applied now: the service has no engine to mute until it
+        // reaches LIVE, so pollLiveState() sends it once that happens.
+        pendingMuteOnLive = previewMuted
         BroadcastService.start(this)
         isLive = true
         updateGoLiveButtonStyle()
@@ -1055,7 +1085,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun onMicToggleClicked() {
-        if (!isLive) return
+        if (!isLive) {
+            previewMuted = !previewMuted
+            if (previewMuted) stopMicPreview() else startMicPreview()
+            applyStatusStyle(BroadcastService.state, callMuted = false, manualMuted = false)
+            return
+        }
         BroadcastService.setMicMuted(this, !BroadcastService.manuallyMuted)
         // Next 300ms poll tick reflects the service's confirmed state
         // (fire-and-forget Intent, same pattern as recording).
@@ -1077,6 +1112,10 @@ class MainActivity : AppCompatActivity() {
 
     private fun pollLiveState() {
         val state = BroadcastService.state
+        if (pendingMuteOnLive && state == BroadcastEngine.State.LIVE) {
+            pendingMuteOnLive = false
+            BroadcastService.setMicMuted(this, true)
+        }
         applyStatusStyle(state, BroadcastService.focusLost, BroadcastService.manuallyMuted)
 
         when (state) {
@@ -1088,9 +1127,10 @@ class MainActivity : AppCompatActivity() {
                     elapsedText.text = ""
                     latencyText.text = getString(R.string.latency_unavailable)
                     listenerCountText.text = getString(R.string.listener_count_unavailable)
-                    dataUsageText.text = ""
                     visualizer.reset()
                     uiHandler.removeCallbacks(livePoller)
+                    // Fresh session: the mic starts unmuted again.
+                    previewMuted = false
                     startMicPreview()
                 }
             }
@@ -1113,16 +1153,12 @@ class MainActivity : AppCompatActivity() {
         }
 
         val count = BroadcastService.listenerCount
-        listenerCountText.text = if (isLive && count != null) {
-            getString(R.string.listener_count_label, count)
+        val mb = BroadcastService.bytesUploadedTotal / 1024.0 / 1024.0
+        val connLabel = getString(if (isOnMobileData()) R.string.data_conn_mobile else R.string.data_conn_wifi)
+        listenerCountText.text = if (isLive) {
+            getString(R.string.listener_data_line, count ?: 0, mb, connLabel)
         } else {
             getString(R.string.listener_count_unavailable)
-        }
-
-        if (isLive) {
-            val mb = BroadcastService.bytesUploadedTotal / 1024.0 / 1024.0
-            val connLabel = getString(if (isOnMobileData()) R.string.data_conn_mobile else R.string.data_conn_wifi)
-            dataUsageText.text = getString(R.string.data_usage_format, mb, connLabel)
         }
 
         updateRecordButtonStyle()
