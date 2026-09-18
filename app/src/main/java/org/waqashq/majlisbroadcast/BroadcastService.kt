@@ -260,6 +260,10 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
             bytesUploadedTotal = 0
             sessionStartWallClock = System.currentTimeMillis()
 
+            DebugLog.log("Going live with noise reduction " + if (AppSettings.noiseReduction(this)) "ON" else "OFF")
+            // Phase 11k: record the noise-reduction state in the debug log so
+            // it can be confirmed after a session (Settings > View Debug Log).
+            DebugLog.log("Going live with noise reduction " + if (AppSettings.noiseReduction(this)) "ON" else "OFF")
             engine = BroadcastEngine(
                 AppSettings.host(this),
                 AppSettings.port(this),

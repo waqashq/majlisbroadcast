@@ -6,6 +6,7 @@ import android.graphics.Color
 import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Shader
+import android.os.SystemClock
 import android.util.AttributeSet
 import android.view.View
 import androidx.core.graphics.ColorUtils
@@ -42,6 +43,8 @@ class SpectrumView @JvmOverloads constructor(
         private const val NEIGHBOUR_BLEED = 0.22f
         /** Idle bars still show this fraction of height, as a resting baseline. */
         private const val MIN_FRACTION = 0.05f
+        /** Phase 11k: how long the whole meter flashes red after a clip, fading out. */
+        private const val CLIP_FLASH_MS = 350L
     }
 
     private val targets = FloatArray(BAND_COUNT)
@@ -50,6 +53,8 @@ class SpectrumView @JvmOverloads constructor(
 
     private val barPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private var barGradient: Shader? = null
+    private val clipPaint = Paint()
+    private var clipFlashUntil = 0L
 
     private val animTick = object : Runnable {
         override fun run() {
@@ -114,6 +119,16 @@ class SpectrumView @JvmOverloads constructor(
         }
     }
 
+    /**
+     * Phase 11k: flash every bar red, fading out over CLIP_FLASH_MS -- the
+     * mic hit the digital ceiling. Replaces the old "Clipping -- move back"
+     * text row. Safe to call on every report while clipping continues; each
+     * call just restarts the fade.
+     */
+    fun flashClip() {
+        clipFlashUntil = SystemClock.uptimeMillis() + CLIP_FLASH_MS
+    }
+
     /** Eases every bar back down to the resting baseline (call when not live). */
     fun reset() {
         targets.fill(0f)
@@ -130,6 +145,10 @@ class SpectrumView @JvmOverloads constructor(
         val minHeight = (h * MIN_FRACTION).coerceAtLeast(barWidth * 0.5f)
 
         barPaint.shader = barGradient
+        // Red overlay while a clip flash is fading; alpha tracks time left.
+        val flashLeft = clipFlashUntil - SystemClock.uptimeMillis()
+        val flashAlpha = if (flashLeft > 0) (230 * flashLeft / CLIP_FLASH_MS).toInt() else 0
+        if (flashAlpha > 0) clipPaint.color = ColorUtils.setAlphaComponent(UiTheme.METER_RED, flashAlpha)
         for (i in 0 until BAND_COUNT) {
             val level = (smoothed[i] / 100f).coerceIn(0f, 1f)
             val barHeight = minHeight + (h - minHeight) * level
@@ -138,6 +157,7 @@ class SpectrumView @JvmOverloads constructor(
             // baseline rather than out from the middle. Square tops (Phase
             // 11g, was rounded) -- sharp corners read as an instrument.
             canvas.drawRect(left, h - barHeight, left + barWidth, h, barPaint)
+            if (flashAlpha > 0) canvas.drawRect(left, h - barHeight, left + barWidth, h, clipPaint)
         }
         barPaint.shader = null
     }

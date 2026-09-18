@@ -409,16 +409,24 @@ class BroadcastEngine(
     private val spectrumAnalyzer = SpectrumAnalyzer(sampleRate, SpectrumView.BAND_COUNT)
     private val spectrumBands = IntArray(SpectrumView.BAND_COUNT)
 
+    // Phase 11k: a clip in a buffer that falls between two ~150ms reports
+    // would otherwise be dropped with the throttled call -- latch it until
+    // the next report so the visualizer's red flash never misses one.
+    private var clippedSinceReport = false
+
     private fun reportLevel(level: Int, clipped: Boolean, pcm: ByteArray? = null, pcmBytes: Int = 0) {
+        if (clipped) clippedSinceReport = true
         val now = SystemClock.elapsedRealtime()
         if (now - lastLevelReportMs < 150) return
         lastLevelReportMs = now
+        val clippedToReport = clippedSinceReport
+        clippedSinceReport = false
         if (pcm != null && pcmBytes > 0) {
             spectrumAnalyzer.analyze(pcm, pcmBytes, spectrumBands)
         } else {
             spectrumBands.fill(0)
         }
-        listener.onLevelUpdate(level, clipped, spectrumBands)
+        listener.onLevelUpdate(level, clippedToReport, spectrumBands)
     }
 
     // ================= Capture + encode thread =================

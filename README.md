@@ -354,6 +354,26 @@ is a close visual proxy rather than an exact replacement. (3) The "Cuts
 hum, rumble and background hiss" hint under Noise Reduction is removed,
 view and strings.
 
+Phase 11k, at the user's request: (1) the visualizer flashes red on a clip
+(the removed text warning's replacement) -- every bar gets a red overlay
+that fades over 350ms, restarted on each clip. Clips are latched between
+the ~150ms level reports in both `BroadcastEngine` and `MicPreview`, so a
+clip in a buffer that falls between two reports is no longer lost, and the
+flash works idle (mic preview) as well as live. (2) "Noise reduction does
+not seem to work at all" -- it very nearly didn't. Every earlier test used
+perfectly steady hiss; on realistic fluctuating room noise (slow +/-4dB
+swells, occasional clatters) the Phase 11j gate eased pauses only -1.9dB,
+and not at all for a quiet talker, because its +4dB opening threshold sits
+right at the MINIMUM of the noise envelope, so ordinary swells held it
+open. Now: opens at +9.5dB, gaps down to -12dB (never silence), 300ms hold,
+250ms release. Measured: pauses -10.6dB on steady hiss / -6.7dB on
+fluctuating room noise, speech still -0.1dB, soft syllables untouched at
+normal and 12dB-quieter voice. It was never a wiring bug (switch ->
+AppSettings -> service action -> engine, and preview rebuilt, all
+confirmed by code review); the debug log now records "Noise reduction
+switched ON/OFF" and "Going live with noise reduction ON/OFF" so the state
+can be confirmed after a session.
+
 Verified: clean build + lint, the dex checked for absence of the temporary
 demo-feed code used for screenshots, and the colour-zone mapping checked
 against bar heights. NOT verified on screen: the meter colours and the

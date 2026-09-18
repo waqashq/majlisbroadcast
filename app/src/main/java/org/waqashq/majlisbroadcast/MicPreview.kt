@@ -28,7 +28,8 @@ class MicPreview(
     private val sampleRate: Int,
     /** Phase 11h: same NoiseReducer as the live path, so the bars match what listeners will hear. */
     private val noiseReduction: Boolean,
-    private val onBands: (IntArray) -> Unit
+    /** bands + whether any sample hit the ceiling since the last callback (Phase 11k). */
+    private val onBands: (IntArray, Boolean) -> Unit
 ) {
     private companion object {
         /** Matches BroadcastEngine.GAIN_FACTOR so preview and live levels agree. */
@@ -59,15 +60,18 @@ class MicPreview(
                 return@Thread
             }
             val buf = ByteArray(bufSize)
+            var clippedSinceReport = false
             try {
                 record.startRecording()
                 while (running) {
                     val read = record.read(buf, 0, buf.size, AudioRecord.READ_BLOCKING)
                     if (read <= 0) continue
-                    applyGain(buf, read)
+                    if (applyGain(buf, read)) clippedSinceReport = true
                     if (analyzer.analyze(buf, read, bands)) {
                         val snapshot = bands.copyOf()
-                        uiHandler.post { if (running) onBands(snapshot) }
+                        val clipped = clippedSinceReport
+                        clippedSinceReport = false
+                        uiHandler.post { if (running) onBands(snapshot, clipped) }
                     }
                 }
             } catch (_: Throwable) {
@@ -88,18 +92,21 @@ class MicPreview(
         thread = null
     }
 
-    /** Noise reduction (if on) then the same fixed gain as BroadcastEngine. */
-    private fun applyGain(buf: ByteArray, byteCount: Int) {
+    /** Noise reduction (if on) then the same fixed gain as BroadcastEngine. Returns true if anything clipped. */
+    private fun applyGain(buf: ByteArray, byteCount: Int): Boolean {
+        var clipped = false
         var i = 0
         while (i + 1 < byteCount) {
             var sample = ((buf[i + 1].toInt() shl 8) or (buf[i].toInt() and 0xFF)).toShort().toDouble()
             if (noiseReduction) sample = noiseReducer.process(sample)
-            val boosted = (sample * GAIN_FACTOR).toInt()
-                .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
+            val raw = (sample * GAIN_FACTOR).toInt()
+            if (raw > Short.MAX_VALUE || raw < Short.MIN_VALUE) clipped = true
+            val boosted = raw.coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
             buf[i] = (boosted and 0xFF).toByte()
             buf[i + 1] = ((boosted shr 8) and 0xFF).toByte()
             i += 2
         }
+        return clipped
     }
 
     /** Same source preference as BroadcastEngine: UNPROCESSED, else CAMCORDER. Never MIC. */

@@ -766,14 +766,18 @@ class MainActivity : AppCompatActivity() {
     private fun startMicPreview() {
         if (isLive || micPreview != null || previewMuted) return
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) return
-        micPreview = MicPreview(AppSettings.sampleRate(this), AppSettings.noiseReduction(this)) { bands ->
-            if (!isLive) visualizer.pushSpectrum(bands)
+        micPreview = MicPreview(AppSettings.sampleRate(this), AppSettings.noiseReduction(this)) { bands, clipped ->
+            if (!isLive) {
+                visualizer.pushSpectrum(bands)
+                if (clipped) visualizer.flashClip()
+            }
         }.also { it.start() }
     }
 
     /** Phase 11h: remember the choice, apply it live if on air, or rebuild the preview with it if idle. */
     private fun onNoiseReductionToggled(enabled: Boolean) {
         AppSettings.saveNoiseReduction(this, enabled)
+        DebugLog.log("Noise reduction switched " + if (enabled) "ON" else "OFF")
         if (isLive) {
             BroadcastService.setNoiseReduction(this, enabled)
         } else if (micPreview != null) {
@@ -1176,6 +1180,8 @@ class MainActivity : AppCompatActivity() {
         }
 
         visualizer.pushSpectrum(BroadcastService.micSpectrum)
+        // Phase 11k: the meter flashes red on a clip (replaces the old text warning).
+        if (BroadcastService.micClipping) visualizer.flashClip()
 
         val latencyEstimateMs = (BroadcastService.queueDepth * 23) + 200
         latencyText.text = if (state == BroadcastEngine.State.LIVE) {

@@ -21,6 +21,14 @@ import kotlin.math.sin
  *    talked, so over a long unbroken passage the floor rose toward the
  *    soft syllables and started dipping them.
  *
+ * Phase 11k ("it does not seem to work at all"): it barely did. Tested on
+ * realistic fluctuating room noise (swells, clatters) instead of steady hiss,
+ * pauses only eased -1.9dB -- the +4dB opening threshold let ordinary noise
+ * swells hold the gate open. Now opens at +9.5dB, gaps go down up to -12dB,
+ * 300ms hold, 250ms release. Measured: pauses -10.6dB on steady hiss and
+ * -6.7dB on fluctuating room noise, speech still -0.1dB, soft syllables
+ * untouched even for a voice 12dB quieter.
+ *
  * Phase 11j ("still a little too much"): the remaining voice loss came
  * almost entirely from the high-pass, so it moved 60Hz -> 40Hz; the gate also
  * got a 500ms hold and opens at +4dB instead of +6dB. Measured now: speech
@@ -41,9 +49,9 @@ import kotlin.math.sin
  *     QUIETEST envelope seen over the last ~2s (4 blocks of 500ms), so it
  *     finds the room's real background level from natural breathing pauses
  *     and cannot creep up during speech. As a second guard it is also
- *     capped ~22dB below recent speech. Gaps are faded down by at most -6dB
- *     (never to silence), with a 3ms attack, a 500ms hold so soft word
- *     endings aren't dipped, and a slow 400ms release so it never pumps.
+ *     capped ~22dB below recent speech. Gaps are faded down by at most -12dB
+ *     (never to silence), with a 3ms attack, a 300ms hold so soft word
+ *     endings aren't dipped, and a 250ms release so it never pumps.
  *
  * All state is per-instance, and [process] (called per sample on the
  * capture thread) never allocates.
@@ -55,12 +63,19 @@ class NoiseReducer(sampleRate: Int) {
         const val HIGHPASS_Q = 0.707 // Butterworth: flat, no resonant bump
         const val ENVELOPE_MS = 60.0
         const val ATTACK_MS = 3.0
-        const val RELEASE_MS = 400.0
-        const val HOLD_MS = 500.0
-        /** Gate opens once the signal is this far above the noise floor (~+4dB) -- easy to stay open while talking. */
-        const val OPEN_RATIO = 1.6
-        /** Deepest attenuation while gated: -6dB. Never silence. */
-        const val GATE_DEPTH_GAIN = 0.5
+        const val RELEASE_MS = 250.0
+        const val HOLD_MS = 300.0
+        /**
+         * Gate opens once the signal is this far above the noise floor
+         * (~+9.5dB). Phase 11k: 1.6 (+4dB) was too close -- the floor is the
+         * MINIMUM of the noise envelope, so ordinary noise swells crossed it
+         * and held the gate open; on realistic room noise pauses only eased
+         * -1.9dB, and not at all for a quiet talker. Speech sits well above
+         * +9.5dB, so this costs the voice nothing (measured -0.1dB).
+         */
+        const val OPEN_RATIO = 3.0
+        /** Deepest attenuation while gated: -12dB. Never silence. */
+        const val GATE_DEPTH_GAIN = 0.25
         const val BLOCK_MS = 500.0
         const val BLOCK_COUNT = 4
         /** How long "recent speech level" takes to decay, for the floor cap. */
