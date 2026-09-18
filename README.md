@@ -341,6 +341,19 @@ voice 12dB quieter is still untouched (pauses then ease only -1dB, erring
 towards leaving audio alone). Much less rumble/pause reduction than before,
 deliberately -- a lecture should never be dipped.
 
+Phase 11j, at the user's request: (1) noise reduction gentler again -- the
+remaining voice loss was almost all the high-pass, so 60Hz -> 40Hz, plus a
+500ms gate hold and opening at +4dB instead of +6dB. Measured: speech
+-0.1dB at normal and 12dB-quieter voice, 100Hz -0.1dB, pauses -3.8dB, 50Hz
+rumble only -1.5dB (knowingly traded away). (2) The "Clipping -- move back
+or speak softer" text is removed entirely, view and strings, per request.
+The engine still detects clipping and `BroadcastService.micClipping` is
+still populated, just no longer shown; note the meter's red zone is a
+per-band loudness indicator, not the same thing as sample clipping, so it
+is a close visual proxy rather than an exact replacement. (3) The "Cuts
+hum, rumble and background hiss" hint under Noise Reduction is removed,
+view and strings.
+
 Verified: clean build + lint, the dex checked for absence of the temporary
 demo-feed code used for screenshots, and the colour-zone mapping checked
 against bar heights. NOT verified on screen: the meter colours and the

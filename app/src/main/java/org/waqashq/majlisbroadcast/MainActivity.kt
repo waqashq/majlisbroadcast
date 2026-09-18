@@ -74,7 +74,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var visualizer: SpectrumView
     private lateinit var disconnectedIcon: ImageView
     private lateinit var bitrateText: TextView
-    private lateinit var micClippingText: TextView
     private lateinit var listenerCountText: TextView
     private lateinit var shareButton: LinearLayout
     private lateinit var bassSeekBar: SeekBar
@@ -418,17 +417,6 @@ class MainActivity : AppCompatActivity() {
         meterRow.addView(visualizer)
         meterRow.addView(bitrateText)
 
-        micClippingText = TextView(this).apply {
-            text = getString(R.string.mic_clipping_warning)
-            textSize = 11f
-            setTextColor(UiTheme.STUDIO_STOP_RED)
-            gravity = Gravity.CENTER
-            // INVISIBLE (not GONE): reserves its row's height at all times
-            // so it doesn't push the rest of the layout around when it
-            // appears/disappears.
-            visibility = View.INVISIBLE
-        }
-
         // Phase 11g: the elapsed clock (live) and the disconnected icon
         // (idle) sit in ONE fixed-height slot, both centred, so swapping
         // between them cannot nudge anything above or below -- the screen
@@ -450,7 +438,7 @@ class MainActivity : AppCompatActivity() {
 
         listOf(
             indicators, latencyRow, statusSlot, statusSubtitle,
-            buttonRow, meterRow, micClippingText
+            buttonRow, meterRow
         ).forEach {
             card.addView(
                 it,
@@ -476,7 +464,6 @@ class MainActivity : AppCompatActivity() {
         indicators.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 20 }
         buttonRow.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 40 }
         meterRow.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 40 }
-        micClippingText.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 20 }
         scrollContent.addView(card, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
 
         // ---- Voice effects card (Phase 9): optional Bass Boost / Echo,
@@ -508,11 +495,6 @@ class MainActivity : AppCompatActivity() {
                 text = getString(R.string.fx_noise_label)
                 textSize = 13f
                 setTextColor(UiTheme.STUDIO_TEXT_PRIMARY)
-            })
-            addView(TextView(this@MainActivity).apply {
-                text = getString(R.string.fx_noise_hint)
-                textSize = 11f
-                setTextColor(UiTheme.STUDIO_TEXT_MUTED)
             })
         }
         noiseSwitch = androidx.appcompat.widget.SwitchCompat(this).apply {
@@ -1194,7 +1176,6 @@ class MainActivity : AppCompatActivity() {
         }
 
         visualizer.pushSpectrum(BroadcastService.micSpectrum)
-        micClippingText.visibility = if (BroadcastService.micClipping) View.VISIBLE else View.INVISIBLE
 
         val latencyEstimateMs = (BroadcastService.queueDepth * 23) + 200
         latencyText.text = if (state == BroadcastEngine.State.LIVE) {

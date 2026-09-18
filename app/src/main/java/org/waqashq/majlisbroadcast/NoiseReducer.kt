@@ -21,21 +21,28 @@ import kotlin.math.sin
  *    talked, so over a long unbroken passage the floor rose toward the
  *    soft syllables and started dipping them.
  *
- * Now, measured on the same lecture-style test signal: speech -0.2/-0.3dB
+ * Phase 11j ("still a little too much"): the remaining voice loss came
+ * almost entirely from the high-pass, so it moved 60Hz -> 40Hz; the gate also
+ * got a 500ms hold and opens at +4dB instead of +6dB. Measured now: speech
+ * -0.1dB at both normal and 12dB-quieter voice, 100Hz -0.1dB, real pauses
+ * -3.8dB, 50Hz rumble only -1.5dB (rumble removal was knowingly traded away).
+ *
+ * Phase 11i numbers, for reference -- measured on the same lecture-style test signal: speech -0.2/-0.3dB
  * (inaudible), 100Hz -0.5dB, real pauses -4.7dB, 50Hz rumble -4.9dB, and a
  * voice 12dB quieter is still untouched. It trades away most of the old
  * rumble/pause reduction for leaving the voice alone, which is the right
  * way round for a lecture.
  *
- *  1. HIGH-PASS at 60Hz, 2nd order only. Takes the edge off fan/AC rumble
- *     and handling thumps while leaving a male voice's fundamental alone.
+ *  1. HIGH-PASS at 40Hz, 2nd order only (Phase 11j: was 60Hz). Clears
+ *     sub-audible thumps and handling bumps; stays well clear of a male
+ *     voice's fundamental.
  *
  *  2. GENTLE GATE with a "minimum statistics" noise floor: the floor is the
  *     QUIETEST envelope seen over the last ~2s (4 blocks of 500ms), so it
  *     finds the room's real background level from natural breathing pauses
  *     and cannot creep up during speech. As a second guard it is also
  *     capped ~22dB below recent speech. Gaps are faded down by at most -6dB
- *     (never to silence), with a 3ms attack, a 300ms hold so soft word
+ *     (never to silence), with a 3ms attack, a 500ms hold so soft word
  *     endings aren't dipped, and a slow 400ms release so it never pumps.
  *
  * All state is per-instance, and [process] (called per sample on the
@@ -44,14 +51,14 @@ import kotlin.math.sin
 class NoiseReducer(sampleRate: Int) {
 
     private companion object {
-        const val HIGHPASS_HZ = 60.0
+        const val HIGHPASS_HZ = 40.0
         const val HIGHPASS_Q = 0.707 // Butterworth: flat, no resonant bump
         const val ENVELOPE_MS = 60.0
         const val ATTACK_MS = 3.0
         const val RELEASE_MS = 400.0
-        const val HOLD_MS = 300.0
-        /** Gate opens once the signal is this far above the noise floor (~+6dB). */
-        const val OPEN_RATIO = 2.0
+        const val HOLD_MS = 500.0
+        /** Gate opens once the signal is this far above the noise floor (~+4dB) -- easy to stay open while talking. */
+        const val OPEN_RATIO = 1.6
         /** Deepest attenuation while gated: -6dB. Never silence. */
         const val GATE_DEPTH_GAIN = 0.5
         const val BLOCK_MS = 500.0
