@@ -322,6 +322,25 @@ release is still easing down, by design); word onsets -1.7dB over the
 first 20ms. Not yet verified: how it sounds on real speech in the actual
 hall.
 
+Phase 11i, at the user's request ("too aggressive -- it turns my actual
+voice down"): `NoiseReducer` rewritten gentler. The user was right, and the
+Phase 11h test had hidden it: it used a 200Hz voice in short bursts. Re-run
+with a male-pitched (100-120Hz) voice speaking continuously, the old
+version cost ~1.6dB on all speech and 3.7dB at 100Hz, because (a) its 4th-
+order 85Hz high-pass reached into a male voice's fundamental, and (b) its
+gate's noise floor crept upward the whole time someone talked, until soft
+syllables got dipped. (The first re-test also had a bug of its own -- pitch
+vibrato built as sin(2*pi*f(t)*t) sweeps the real frequency toward 0Hz --
+fixed by accumulating phase.) Now: 2nd-order high-pass at 60Hz; a
+minimum-statistics noise floor (quietest envelope over the last 4 x 500ms
+blocks, additionally capped ~22dB below recent speech) so it cannot climb
+during speech; opens at +6dB, attenuates gaps by at most -6dB, 3ms attack,
+300ms hold, 400ms release. Measured on the lecture-style signal: speech
+-0.2/-0.3dB, 100Hz -0.5dB, real pauses -4.7dB, 50Hz rumble -4.9dB, and a
+voice 12dB quieter is still untouched (pauses then ease only -1dB, erring
+towards leaving audio alone). Much less rumble/pause reduction than before,
+deliberately -- a lecture should never be dipped.
+
 Verified: clean build + lint, the dex checked for absence of the temporary
 demo-feed code used for screenshots, and the colour-zone mapping checked
 against bar heights. NOT verified on screen: the meter colours and the
