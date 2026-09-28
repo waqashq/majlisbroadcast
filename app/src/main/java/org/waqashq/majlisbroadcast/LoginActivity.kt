@@ -11,6 +11,7 @@ import android.view.View
 import android.view.ViewOutlineProvider
 import android.widget.Button
 import android.widget.EditText
+import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -64,7 +65,10 @@ class LoginActivity : AppCompatActivity() {
     private fun buildUi() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(UiTheme.STUDIO_BG)
+            // Phase 11p: transparent now -- the dark green satin photo sits
+            // behind it (see the backdrop/scrim below). Nothing else on this
+            // screen changed.
+            setBackgroundColor(android.graphics.Color.TRANSPARENT)
         }
 
         // Centered both ways: content sits inside a fillViewport ScrollView
@@ -114,7 +118,10 @@ class LoginActivity : AppCompatActivity() {
 
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            background = UiTheme.studioCard()
+            // Phase 11p: transparent, at the user's request -- the satin
+            // shows through where the dark card used to be. The fields keep
+            // their own outlines, so the grouping still reads.
+            background = null
             setPadding(40, 40, 40, 40)
         }
 
@@ -158,7 +165,27 @@ class LoginActivity : AppCompatActivity() {
             addView(content, LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.MATCH_PARENT)
         }
         root.addView(scrollView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.MATCH_PARENT))
-        setContentView(root)
+
+        // Phase 11p: photographic backdrop, at the user's request. Three
+        // layers, back to front: the photo (CENTER_CROP so it fills any
+        // screen shape without distorting), a dark scrim in the app's own
+        // background colour so the white/grey text and the outlined input
+        // fields keep their contrast over a busy image, then the existing
+        // login layout untouched on top.
+        val backdrop = ImageView(this).apply {
+            setImageResource(R.drawable.login_bg)
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            contentDescription = null
+        }
+        val scrim = View(this).apply {
+            setBackgroundColor(androidx.core.graphics.ColorUtils.setAlphaComponent(UiTheme.STUDIO_BG, 0xA6))
+        }
+        val backdropLayers = FrameLayout(this)
+        val fill = { FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT) }
+        backdropLayers.addView(backdrop, fill())
+        backdropLayers.addView(scrim, fill())
+        backdropLayers.addView(root, fill())
+        setContentView(backdropLayers)
     }
 
     private fun input(hintText: String, isPassword: Boolean = false): EditText = EditText(this).apply {

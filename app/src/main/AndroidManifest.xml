@@ -11,6 +11,16 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
+    <!--
+      Phase 11p: needed only so the Recordings screen can still LIST recordings
+      this app made under a previous install. MediaStore hands an app its own
+      rows for free, but reinstalling (or clearing data) drops that ownership,
+      and without this the earlier recordings vanish from the list even though
+      the files are still sitting in Music/Malfoozat e Akhtar. Nothing else
+      here reads other apps' audio.
+    -->
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
 
     <application
         android:allowBackup="true"

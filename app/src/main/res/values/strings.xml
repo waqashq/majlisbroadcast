@@ -9,6 +9,7 @@
     <string name="status_live_connecting">Connecting to %1$s:%2$d…</string>
     <string name="status_live_on_air">Live</string>
     <string name="status_live_reconnecting">Reconnecting…</string>
+    <string name="status_live_recording">Recording (not broadcasting).</string>
     <string name="status_live_stopped">Offline.</string>
     <string name="status_live_error">Error: %1$s</string>
     <string name="status_muted_suffix"> (muted — call in progress)</string>
@@ -87,6 +88,7 @@
     <string name="status_pill_connecting">CONNECTING</string>
     <string name="status_pill_on_air">ON AIR</string>
     <string name="status_pill_reconnecting">RECONNECTING</string>
+    <string name="status_pill_recording">RECORDING</string>
     <string name="status_pill_error">ERROR</string>
     <!-- Phase 11: website (waqashq.org) live light, separate from the app's own ON AIR chip -->
     <string name="website_status_live">LIVE</string>
@@ -97,6 +99,7 @@
     <string name="cd_website_status">Website live status</string>
 
     <string name="status_subtitle_offline">Ready to broadcast</string>
+    <string name="status_subtitle_recording">Recording — not broadcasting</string>
     <string name="status_subtitle_connecting">Connecting to server…</string>
     <string name="status_subtitle_on_air">Broadcasting Live</string>
     <string name="status_subtitle_reconnecting">Reconnecting…</string>
@@ -138,6 +141,7 @@
 
     <string name="recordings_title">Recordings</string>
     <string name="recordings_empty">No recordings yet.</string>
+    <string name="recordings_position_format">%1$s / %2$s</string>
     <string name="recordings_row_detail">%1$s -- %2$s -- %3$s MB</string>
     <string name="btn_play">Play</string>
     <string name="btn_stop_playback">Stop</string>

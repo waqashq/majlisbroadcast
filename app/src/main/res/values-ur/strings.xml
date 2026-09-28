@@ -9,6 +9,7 @@
     <string name="status_live_connecting">%1$s:%2$d سے رابطہ ہو رہا ہے…</string>
     <string name="status_live_on_air">براہ راست</string>
     <string name="status_live_reconnecting">دوبارہ رابطہ ہو رہا ہے…</string>
+    <string name="status_live_recording">ریکارڈنگ جاری ہے (نشر نہیں ہو رہی)۔</string>
     <string name="status_live_stopped">آف لائن۔</string>
     <string name="status_live_error">خرابی: %1$s</string>
     <string name="status_muted_suffix"> (خاموش — کال جاری ہے)</string>
@@ -87,6 +88,7 @@
     <string name="status_pill_connecting">رابطہ ہو رہا ہے</string>
     <string name="status_pill_on_air">براہ راست نشر</string>
     <string name="status_pill_reconnecting">دوبارہ رابطہ</string>
+    <string name="status_pill_recording">ریکارڈنگ</string>
     <string name="status_pill_error">خرابی</string>
     <!-- Phase 11: website (waqashq.org) live light, separate from the app's own ON AIR chip -->
     <string name="website_status_live">براہ راست</string>
@@ -97,6 +99,7 @@
     <string name="cd_website_status">ویب سائٹ کی حالت</string>
 
     <string name="status_subtitle_offline">نشر کرنے کے لیے تیار</string>
+    <string name="status_subtitle_recording">ریکارڈنگ — نشر نہیں ہو رہی</string>
     <string name="status_subtitle_connecting">سرور سے رابطہ ہو رہا ہے…</string>
     <string name="status_subtitle_on_air">براہ راست نشریات جاری ہیں</string>
     <string name="status_subtitle_reconnecting">دوبارہ رابطہ ہو رہا ہے…</string>
@@ -138,6 +141,7 @@
 
     <string name="recordings_title">ریکارڈنگز</string>
     <string name="recordings_empty">ابھی تک کوئی ریکارڈنگ نہیں۔</string>
+    <string name="recordings_position_format">%1$s / %2$s</string>
     <string name="recordings_row_detail">%1$s -- %2$s -- %3$s MB</string>
     <string name="btn_play">چلائیں</string>
     <string name="btn_stop_playback">روکیں</string>

@@ -35,10 +35,18 @@ class BroadcastEngine(
     initialBassLevel: Int,
     initialEchoLevel: Int,
     initialNoiseReduction: Boolean,
+    /**
+     * Phase 11p: false starts a RECORD-ONLY session -- mic, effects and
+     * encoder all run exactly as usual, but nothing is uploaded, so the app
+     * doubles as a plain voice recorder. [enableBroadcast] switches an
+     * already-running record-only session on air without interrupting the
+     * recording (same file keeps growing).
+     */
+    broadcastEnabled: Boolean,
     private val audioManager: AudioManager,
     private val listener: Listener
 ) {
-    enum class State { IDLE, CONNECTING, LIVE, RECONNECTING, STOPPED, ERROR }
+    enum class State { IDLE, CONNECTING, LIVE, RECORDING, RECONNECTING, STOPPED, ERROR }
 
     interface Listener {
         fun onStateChanged(state: State, error: String?)
@@ -275,6 +283,22 @@ class BroadcastEngine(
         return mixed
     }
 
+    /** Phase 11p: false = capture/encode/record but never open a socket. */
+    @Volatile private var uploadEnabled = broadcastEnabled
+    val isBroadcasting: Boolean get() = uploadEnabled
+
+    /**
+     * Takes a record-only session on air. The capture thread is untouched,
+     * so a recording in progress simply continues while the writer thread
+     * connects.
+     */
+    fun enableBroadcast() {
+        if (uploadEnabled) return
+        uploadEnabled = true
+        state = State.CONNECTING
+        DebugLog.log("Recording session going live")
+    }
+
     fun start() {
         if (running) return
         running = true
@@ -291,7 +315,7 @@ class BroadcastEngine(
         // processing setting that re-encodes the incoming stream),
         // not this app.
         DebugLog.log("Session config: mount='${mount.ifBlank { "/" }}', sampleRate=${sampleRate}Hz, bitRate=${bitRateBps / 1000}kbps")
-        state = State.CONNECTING
+        state = if (uploadEnabled) State.CONNECTING else State.RECORDING
 
         captureThread = Thread({ runCapture() }, "BroadcastEngine-capture").apply {
             priority = Thread.MAX_PRIORITY
@@ -721,6 +745,14 @@ class BroadcastEngine(
         var backoffMs = BACKOFF_MIN_MS
 
         while (running) {
+            // Phase 11p: record-only. The capture thread keeps encoding (and
+            // writing the local file); this thread just throws the frames
+            // away instead of opening a socket, so the queue can't fill up.
+            if (!uploadEnabled) {
+                queue.clear()
+                Thread.sleep(100)
+                continue
+            }
             // --- (Re)connect if needed ---
             if (currentUploader == null) {
                 if (state == State.RECONNECTING) {

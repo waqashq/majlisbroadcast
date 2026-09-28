@@ -109,6 +109,11 @@ class MainActivity : AppCompatActivity() {
     private var pendingMuteOnLive = false
     private var roundButtonSizePx = 0
     private var isLive = false
+    // Phase 11p: recording with nothing on air. Everything that used to key
+    // off isLive alone (the poller, the mic preview, the elapsed clock) now
+    // treats this as a running session too -- see sessionActive.
+    private var isRecordingOnly = false
+    private val sessionActive: Boolean get() = isLive || isRecordingOnly
     // Phase 9: set from the "Go Live" shortcut's intent extra, consumed
     // (set back to false) the first time maybeAutoGoLive() actually fires.
     private var pendingAutoGoLive = false
@@ -121,7 +126,7 @@ class MainActivity : AppCompatActivity() {
             // visualizer gets fresh band data as soon as it exists. Its own
             // per-frame easing (SpectrumView) does the smoothing between
             // these updates.
-            if (isLive) uiHandler.postDelayed(this, 150)
+            if (sessionActive) uiHandler.postDelayed(this, 150)
         }
     }
 
@@ -174,6 +179,12 @@ class MainActivity : AppCompatActivity() {
             BroadcastService.state == BroadcastEngine.State.RECONNECTING
         ) {
             isLive = true
+            updateGoLiveButtonStyle()
+            uiHandler.post(livePoller)
+        } else if (BroadcastService.state == BroadcastEngine.State.RECORDING) {
+            // Phase 11p: a record-only session (REC without LIVE) is just as
+            // much a running session -- pick it up the same way.
+            isRecordingOnly = true
             updateGoLiveButtonStyle()
             uiHandler.post(livePoller)
         }
@@ -548,7 +559,7 @@ class MainActivity : AppCompatActivity() {
             override fun onStopTrackingTouch(seekBar: SeekBar?) {
                 val level = seekBar?.progress ?: 0
                 AppSettings.saveBassLevel(this@MainActivity, level)
-                if (isLive) BroadcastService.setBassLevel(this@MainActivity, level)
+                if (sessionActive) BroadcastService.setBassLevel(this@MainActivity, level)
             }
         })
         fxCard.addView(bassSeekBar, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 4 })
@@ -583,17 +594,18 @@ class MainActivity : AppCompatActivity() {
             override fun onStopTrackingTouch(seekBar: SeekBar?) {
                 val level = seekBar?.progress ?: 0
                 AppSettings.saveEchoLevel(this@MainActivity, level)
-                if (isLive) BroadcastService.setEchoLevel(this@MainActivity, level)
+                if (sessionActive) BroadcastService.setEchoLevel(this@MainActivity, level)
             }
         })
         fxCard.addView(echoSeekBar, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 4 })
 
-        scrollContent.addView(
-            fxCard,
-            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 28 }
-        )
-
-        // ---- Listeners + Share (below the card) ----
+        // ---- Listeners line (Phase 11p: moved ABOVE the Voice Effects card,
+        // was between the card and Share Event). It's only ever INVISIBLE
+        // while idle -- never GONE -- so its row keeps its space and nothing
+        // moves when going live. Sitting between the card and the button,
+        // that reserved row was most of the gap the user wanted removed;
+        // up here it costs nothing, and it reads better next to the live
+        // status anyway. ----
         listenerCountText = TextView(this).apply {
             textSize = 15f
             setTypeface(typeface, Typeface.BOLD)
@@ -621,7 +633,9 @@ class MainActivity : AppCompatActivity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
             background = UiTheme.pillButtonBackground(UiTheme.STUDIO_ON_AIR_GREEN)
-            setPadding(0, 22, 0, 22)
+            // Phase 11p: narrower than full width (was MATCH_PARENT with no
+            // side padding), sized to its own content and centred below.
+            setPadding(70, 22, 70, 22)
             isClickable = true
             isFocusable = true
             addView(shareIcon)
@@ -637,13 +651,24 @@ class MainActivity : AppCompatActivity() {
         // (never GONE) while idle -- its row stays reserved so nothing below
         // it moves when going live or stopping. dataUsageText is folded into
         // this line and no longer added to the layout.
+        // Order on screen: status card, listeners line, Voice Effects card,
+        // Share Event -- with only a small margin left between the card and
+        // the button (Phase 11p; was a reserved text row plus 48px of
+        // margins).
         scrollContent.addView(
             listenerCountText,
-            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 20 }
+            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 16 }
+        )
+        scrollContent.addView(
+            fxCard,
+            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 16 }
         )
         scrollContent.addView(
             shareButton,
-            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 28 }
+            LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                topMargin = 12
+                gravity = Gravity.CENTER_HORIZONTAL
+            }
         )
 
         val scrollView = ScrollView(this).apply { addView(scrollContent) }
@@ -665,7 +690,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun refreshStaticInfo() {
-        if (!isLive) applyStatusStyle(BroadcastEngine.State.IDLE, callMuted = false, manualMuted = false)
+        if (!sessionActive) applyStatusStyle(BroadcastEngine.State.IDLE, callMuted = false, manualMuted = false)
     }
 
     /** Recolors/relabels the Go Live button for its current idle/live state. */
@@ -687,8 +712,9 @@ class MainActivity : AppCompatActivity() {
         // The elapsed clock and the disconnected icon live in the same
         // fixed-height slot (statusSlot), so swapping them cannot move
         // anything else on the screen.
-        elapsedText.visibility = if (isLive) View.VISIBLE else View.INVISIBLE
-        disconnectedIcon.visibility = if (isLive) View.INVISIBLE else View.VISIBLE
+        // Phase 11p: the clock runs for a record-only session too.
+        elapsedText.visibility = if (sessionActive) View.VISIBLE else View.INVISIBLE
+        disconnectedIcon.visibility = if (sessionActive) View.INVISIBLE else View.VISIBLE
     }
 
     private fun updateRecordButtonStyle() {
@@ -703,8 +729,10 @@ class MainActivity : AppCompatActivity() {
             UiTheme.roundOutline(UiTheme.STUDIO_TEXT_MUTED)
         }
         recordButton.setTextColor(if (recording) UiTheme.STUDIO_TEXT_PRIMARY else UiTheme.STUDIO_TEXT_SECONDARY)
-        recordButton.isEnabled = isLive
-        recordButton.alpha = if (isLive) 1f else 0.5f
+        // Phase 11p: recording no longer requires being live, so REC is
+        // always available (it used to be greyed out until you went live).
+        recordButton.isEnabled = true
+        recordButton.alpha = 1f
     }
 
     /** Central place mapping engine state (+ mute) to the pill badge, subtitle, and latency row. */
@@ -715,6 +743,9 @@ class MainActivity : AppCompatActivity() {
         val (pillText, pillFg) = when (state) {
             BroadcastEngine.State.CONNECTING -> getString(R.string.status_pill_connecting) to UiTheme.STUDIO_AMBER
             BroadcastEngine.State.LIVE -> getString(R.string.status_pill_on_air) to UiTheme.STUDIO_ON_AIR_GREEN
+            // Phase 11p: recording with nothing on air -- red, like the REC
+            // button itself, and deliberately NOT the green ON AIR look.
+            BroadcastEngine.State.RECORDING -> getString(R.string.status_pill_recording) to UiTheme.STUDIO_STOP_RED
             BroadcastEngine.State.RECONNECTING -> getString(R.string.status_pill_reconnecting) to UiTheme.STUDIO_AMBER
             BroadcastEngine.State.ERROR -> getString(R.string.status_pill_error) to UiTheme.STUDIO_STOP_RED
             // Red (was muted grey) so the label agrees with the red lamp, same as the website chip.
@@ -727,18 +758,24 @@ class MainActivity : AppCompatActivity() {
         appLight.lamp = when (state) {
             BroadcastEngine.State.LIVE -> StatusLightView.Lamp.LIVE
             BroadcastEngine.State.CONNECTING, BroadcastEngine.State.RECONNECTING -> StatusLightView.Lamp.WAITING
-            BroadcastEngine.State.ERROR, BroadcastEngine.State.STOPPED, BroadcastEngine.State.IDLE -> StatusLightView.Lamp.OFFLINE
+            BroadcastEngine.State.ERROR, BroadcastEngine.State.STOPPED, BroadcastEngine.State.IDLE,
+            // Record-only isn't on air, so the app lamp stays off.
+            BroadcastEngine.State.RECORDING -> StatusLightView.Lamp.OFFLINE
         }
 
         val isLiveState = state == BroadcastEngine.State.LIVE
-        statusSubtitle.text = if (isLiveState && callMuted) {
+        // Phase 11p: mute applies to a record-only session too, so the mute
+        // wording and the mic colour follow "capturing", not just "on air".
+        val isCapturingState = isLiveState || state == BroadcastEngine.State.RECORDING
+        statusSubtitle.text = if (isCapturingState && callMuted) {
             getString(R.string.status_subtitle_muted)
-        } else if (isLiveState && manualMuted) {
+        } else if (isCapturingState && manualMuted) {
             getString(R.string.status_subtitle_muted_manual)
         } else {
             when (state) {
                 BroadcastEngine.State.CONNECTING -> getString(R.string.status_subtitle_connecting)
                 BroadcastEngine.State.LIVE -> getString(R.string.status_subtitle_on_air)
+                BroadcastEngine.State.RECORDING -> getString(R.string.status_subtitle_recording)
                 BroadcastEngine.State.RECONNECTING -> getString(R.string.status_subtitle_reconnecting)
                 BroadcastEngine.State.ERROR -> getString(R.string.status_subtitle_error)
                 BroadcastEngine.State.STOPPED, BroadcastEngine.State.IDLE -> getString(R.string.status_subtitle_offline)
@@ -746,8 +783,8 @@ class MainActivity : AppCompatActivity() {
         }
 
         val micColor = when {
-            isLiveState && (callMuted || manualMuted) -> UiTheme.STUDIO_STOP_RED
-            isLiveState -> UiTheme.STUDIO_ON_AIR_GREEN
+            isCapturingState && (callMuted || manualMuted) -> UiTheme.STUDIO_STOP_RED
+            isCapturingState -> UiTheme.STUDIO_ON_AIR_GREEN
             previewMuted -> UiTheme.STUDIO_STOP_RED
             else -> UiTheme.STUDIO_TEXT_SECONDARY
         }
@@ -764,10 +801,10 @@ class MainActivity : AppCompatActivity() {
      * mic permission, or if already running.
      */
     private fun startMicPreview() {
-        if (isLive || micPreview != null || previewMuted) return
+        if (sessionActive || micPreview != null || previewMuted) return
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) return
         micPreview = MicPreview(AppSettings.sampleRate(this), AppSettings.noiseReduction(this)) { bands, clipped ->
-            if (!isLive) {
+            if (!sessionActive) {
                 visualizer.pushSpectrum(bands)
                 if (clipped) visualizer.flashClip()
             }
@@ -782,7 +819,7 @@ class MainActivity : AppCompatActivity() {
     private fun onNoiseReductionToggled(enabled: Boolean) {
         AppSettings.saveNoiseReduction(this, enabled)
         DebugLog.log("Noise reduction switched " + if (enabled) "ON" else "OFF")
-        if (isLive) {
+        if (sessionActive) {
             BroadcastService.setNoiseReduction(this, enabled)
         } else {
             micPreview?.noiseReduction = enabled
@@ -988,6 +1025,9 @@ class MainActivity : AppCompatActivity() {
             DebugLog.log("Stop tapped")
             BroadcastService.stop(this)
             isLive = false
+            // Per the request: stopping LIVE also stops a recording that was
+            // running with it (the service finalizes the file first).
+            isRecordingOnly = false
             updateGoLiveButtonStyle()
             updateRecordButtonStyle()
             applyStatusStyle(BroadcastEngine.State.STOPPED, callMuted = false, manualMuted = false)
@@ -1024,6 +1064,7 @@ class MainActivity : AppCompatActivity() {
         pendingMuteOnLive = previewMuted
         BroadcastService.start(this)
         isLive = true
+        isRecordingOnly = false
         updateGoLiveButtonStyle()
         updateRecordButtonStyle()
         applyStatusStyle(BroadcastEngine.State.CONNECTING, callMuted = false, manualMuted = false)
@@ -1114,7 +1155,24 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun onRecordClicked() {
-        if (!isLive) return
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            proceedWithFirstRunChecks()
+            return
+        }
+        // Phase 11p: starting a recording with nothing live starts a
+        // record-only session, so the mic has to be handed over from the
+        // preview first -- exactly as going live does.
+        if (!BroadcastService.isRecording && !sessionActive) {
+            DebugLog.log("REC tapped (not live) -- starting recording session")
+            stopMicPreview(waitForRelease = true)
+            isRecordingOnly = true
+            BroadcastService.startRecording(this)
+            updateGoLiveButtonStyle()
+            updateRecordButtonStyle()
+            applyStatusStyle(BroadcastEngine.State.RECORDING, callMuted = false, manualMuted = false)
+            uiHandler.post(livePoller)
+            return
+        }
         if (BroadcastService.isRecording) {
             BroadcastService.stopRecording(this)
             BroadcastService.lastRecordingFileName?.let { name ->
@@ -1130,7 +1188,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun onMicToggleClicked() {
-        if (!isLive) {
+        // Phase 11p: during a record-only session the engine owns the mic, so
+        // mute goes to the service exactly as it does while live.
+        if (!sessionActive) {
             previewMuted = !previewMuted
             if (previewMuted) stopMicPreview() else startMicPreview()
             applyStatusStyle(BroadcastService.state, callMuted = false, manualMuted = false)
@@ -1165,8 +1225,9 @@ class MainActivity : AppCompatActivity() {
 
         when (state) {
             BroadcastEngine.State.STOPPED, BroadcastEngine.State.IDLE -> {
-                if (isLive) {
+                if (sessionActive) {
                     isLive = false
+                    isRecordingOnly = false
                     updateGoLiveButtonStyle()
                     updateRecordButtonStyle()
                     elapsedText.text = ""

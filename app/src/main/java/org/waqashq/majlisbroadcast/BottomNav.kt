@@ -64,16 +64,16 @@ private fun Context.navTab(iconRes: Int, label: String, tab: NavTab, active: Nav
     val icon = ImageView(this).apply {
         setImageResource(iconRes)
         setColorFilter(if (isActive) UiTheme.STUDIO_BORDER_TEAL else UiTheme.STUDIO_TEXT_MUTED)
-        layoutParams = LinearLayout.LayoutParams(48, 48)
+        layoutParams = LinearLayout.LayoutParams(58, 58)
     }
     val text = TextView(this).apply {
         text = label
-        textSize = 11f
+        textSize = 13f
         setTypeface(typeface, if (isActive) Typeface.BOLD else Typeface.NORMAL)
         setTextColor(if (isActive) UiTheme.STUDIO_BORDER_TEAL else UiTheme.STUDIO_TEXT_MUTED)
         gravity = Gravity.CENTER
     }
-    tabView.addView(icon, LinearLayout.LayoutParams(48, 48))
+    tabView.addView(icon, LinearLayout.LayoutParams(58, 58))
     tabView.addView(text, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 5 })
     if (!isActive) {
         tabView.setOnClickListener { navigateToTab(tab) }

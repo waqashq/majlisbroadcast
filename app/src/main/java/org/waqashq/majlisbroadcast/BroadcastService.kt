@@ -140,10 +140,21 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
             context.startService(intent)
         }
 
-        /** No-op if not currently live -- recording only makes sense while the engine is capturing audio. */
+        /**
+         * Phase 11p: works whether or not anything is live. With nothing
+         * running this starts the service itself for a record-only session,
+         * which is why it uses startForegroundService (and marks the state
+         * up front, for the same reason as [start]).
+         */
         fun startRecording(context: Context) {
+            if (state != BroadcastEngine.State.LIVE &&
+                state != BroadcastEngine.State.CONNECTING &&
+                state != BroadcastEngine.State.RECONNECTING
+            ) {
+                state = BroadcastEngine.State.RECORDING
+            }
             val intent = Intent(context, BroadcastService::class.java).apply { action = ACTION_START_RECORDING }
-            context.startService(intent)
+            context.startForegroundService(intent)
         }
 
         fun stopRecording(context: Context) {
@@ -219,11 +230,19 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
             return START_NOT_STICKY
         }
         if (intent?.action == ACTION_START_RECORDING) {
+            // Phase 11p: recording no longer needs a broadcast. With nothing
+            // running, this starts a record-only session (mic + encoder, no
+            // socket); with one already running it just opens the file.
+            ensureSession(broadcast = false)
             beginLocalRecording()
             return START_NOT_STICKY
         }
         if (intent?.action == ACTION_STOP_RECORDING) {
             endLocalRecording()
+            // A record-only session exists purely for the recording, so
+            // stopping the recording ends it (and the mic + notification).
+            // While broadcasting, the session carries on as before.
+            if (engine?.isBroadcasting == false) stopBroadcast()
             return START_NOT_STICKY
         }
         if (intent?.action == ACTION_MUTE_MIC) {
@@ -253,11 +272,32 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
             return START_NOT_STICKY
         }
 
-        if (engine == null) {
+        ensureSession(broadcast = true)
+        return START_NOT_STICKY
+    }
+
+    /**
+     * Phase 11p: starts the capture session if it isn't running yet, either
+     * broadcasting or record-only; if a record-only session IS running and
+     * [broadcast] is true, takes it on air without disturbing the recording.
+     */
+    private fun ensureSession(broadcast: Boolean) {
+        val existing = engine
+        if (existing != null) {
+            if (broadcast && !existing.isBroadcasting) {
+                existing.enableBroadcast()
+                updateNotification(BroadcastEngine.State.CONNECTING)
+                registerNetworkCallback()
+                startListenerPolling()
+            }
+            return
+        }
+        run {
             // Must be called within seconds of startForegroundService() --
             // do it first, before anything that could be slow.
             ServiceCompat.startForeground(
-                this, NOTIFICATION_ID, buildNotification(BroadcastEngine.State.CONNECTING),
+                this, NOTIFICATION_ID,
+                buildNotification(if (broadcast) BroadcastEngine.State.CONNECTING else BroadcastEngine.State.RECORDING),
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
             )
             acquireLocks()
@@ -272,7 +312,10 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
 
             // Phase 11k: record the noise-reduction state in the debug log so
             // it can be confirmed after a session (Settings > View Debug Log).
-            DebugLog.log("Going live with noise reduction " + if (AppSettings.noiseReduction(this)) "ON" else "OFF")
+            DebugLog.log(
+                (if (broadcast) "Going live" else "Starting recording session") +
+                    " with noise reduction " + if (AppSettings.noiseReduction(this)) "ON" else "OFF"
+            )
             engine = BroadcastEngine(
                 AppSettings.host(this),
                 AppSettings.port(this),
@@ -284,15 +327,19 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
                 AppSettings.bassLevel(this),
                 AppSettings.echoLevel(this),
                 AppSettings.noiseReduction(this),
+                broadcast,
                 am,
                 this
             ).also { it.start() }
 
             requestAudioFocus(am)
-            registerNetworkCallback()
-            startListenerPolling()
+            // Only a broadcasting session needs the network callback and the
+            // listener-count polling; a record-only one touches no network.
+            if (broadcast) {
+                registerNetworkCallback()
+                startListenerPolling()
+            }
         }
-        return START_NOT_STICKY
     }
 
     private fun stopBroadcast() {
@@ -311,13 +358,16 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
         // endLocalRecording() is the same finalize path "Stop Recording"
         // already uses, so calling it here covers the case the user forgot.
         if (isRecording) endLocalRecording()
+        // Phase 11p: a record-only session was never on air, so it doesn't
+        // belong in the broadcast history (which counts listeners and MB).
+        val wasBroadcasting = engine?.isBroadcasting != false
         engine?.stop() // also flushes/closes any open local recording
         engine = null
         unregisterNetworkCallback()
         abandonAudioFocus()
         releaseLocks()
         stopListenerPolling()
-        recordSessionHistoryIfMeaningful()
+        if (wasBroadcasting) recordSessionHistoryIfMeaningful()
         manuallyMuted = false
         state = BroadcastEngine.State.STOPPED
         sessionStartRealtime = 0
@@ -389,13 +439,14 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
         // covers the service being torn down some other way (e.g. the OS
         // killing it) while a recording was still in progress.
         if (isRecording) endLocalRecording()
+        val wasBroadcasting = engine?.isBroadcasting != false
         engine?.stop()
         engine = null
         unregisterNetworkCallback()
         abandonAudioFocus()
         releaseLocks()
         stopListenerPolling()
-        recordSessionHistoryIfMeaningful()
+        if (wasBroadcasting) recordSessionHistoryIfMeaningful()
         manuallyMuted = false
         sessionStartRealtime = 0
         super.onDestroy()
@@ -536,6 +587,7 @@ class BroadcastService : Service(), BroadcastEngine.Listener {
                 R.string.status_live_connecting, AppSettings.host(this), AppSettings.port(this)
             )
             BroadcastEngine.State.LIVE -> getString(R.string.status_live_on_air)
+            BroadcastEngine.State.RECORDING -> getString(R.string.status_live_recording)
             BroadcastEngine.State.RECONNECTING -> getString(R.string.status_live_reconnecting)
             BroadcastEngine.State.ERROR -> getString(R.string.status_live_error, lastError ?: "unknown")
             BroadcastEngine.State.STOPPED, BroadcastEngine.State.IDLE -> getString(R.string.status_live_stopped)

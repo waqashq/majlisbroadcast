@@ -465,3 +465,43 @@ Emulator note: the `salah_test` AVD's host process repeatedly crashed
 (exit 139) mid-way through reading the host's DNS configuration whenever
 the app made network calls; starting it with
 `-dns-server 8.8.8.8,1.1.1.1` avoids that path and it ran stably.
+
+Phase 11p, four requests plus a background image: (1) RECORDING WITHOUT
+BROADCASTING. BroadcastEngine takes a `broadcastEnabled` flag; when false
+the writer thread never opens a socket (it just drains the queue) while
+capture/effects/encoder/local-recording run exactly as usual, and the new
+State.RECORDING drives the pill/notification. BroadcastService.ensureSession()
+starts either kind of session and, if LIVE is pressed during a record-only
+one, calls engine.enableBroadcast() so the SAME recording continues while
+the writer connects. Stopping LIVE still ends both (the file is finalized
+first), and stopping the recording ends a record-only session. Record-only
+sessions are kept out of SessionHistory, which counts listeners/MB.
+MainActivity gained isRecordingOnly/sessionActive, so the poller, mic
+preview, elapsed clock, mute and the Voice Effects sliders all treat it as
+a running session; REC is no longer greyed out while idle.
+(2) Bottom nav icons 48->58px, labels 11->13sp. (3) Share Event is now
+wrap-width and centred instead of edge-to-edge, and the listeners line
+moved ABOVE the Voice Effects card -- it is INVISIBLE (not GONE) while idle
+so nothing shifts on go-live, and sitting between the card and the button
+that reserved row was most of the gap; trimming margins alone (first
+attempt) barely helped. (4) Recordings rows gained a seek bar + "position /
+length" readout: dragging while playing seeks, dragging while stopped sets
+where Play will start, stopping remembers the position, finishing rewinds.
+Phase 11p also adds a photographic backdrop (dark green satin, supplied by
+the user, converted 839KB -> 79KB at 720x1290 in res/drawable-nodpi) behind
+the login AND splash screens, under a 65% scrim for text contrast, with the
+login card itself made transparent. READ_MEDIA_AUDIO is now requested from
+the Recordings screen: MediaStore only returns rows the CURRENT install
+owns, so after a reinstall every earlier recording vanished from the list
+(the files were always safe on disk).
+
+Verified on the phone over wireless adb: record-only session start/stop
+(debug log + a new file; a timed test gave 19.2s of audio for 20s of wall
+clock, i.e. real-time capture), seek bar tracking/seeking/resume, the new
+nav and Share sizes, both backdrops, and the recordings list restored by
+the permission. NOT verified: pressing LIVE during a record-only session,
+which would broadcast to the real station.
+
+Testing note: uiautomator dumps on this device are frequently STALE (they
+showed "Play"/00:00 while playback was genuinely running). Screenshots are
+the reliable check.

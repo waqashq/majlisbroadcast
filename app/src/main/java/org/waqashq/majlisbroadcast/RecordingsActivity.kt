@@ -2,18 +2,23 @@ package org.waqashq.majlisbroadcast
 
 import android.content.ContentUris
 import android.content.Intent
+import android.content.res.ColorStateList
 import android.graphics.Typeface
 import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.provider.MediaStore
 import android.view.Gravity
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
+import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -41,9 +46,60 @@ class RecordingsActivity : AppCompatActivity() {
     private var playingUri: Uri? = null
     private var playingButton: Button? = null
 
+    // Phase 11p: per-recording seek bar. The bar for the row being played is
+    // driven by this ticker; dragging any bar seeks that recording (or, if
+    // it isn't the one playing, decides where it will start from).
+    private var playingSeekBar: SeekBar? = null
+    private var playingPositionText: TextView? = null
+    private val uiHandler = Handler(Looper.getMainLooper())
+    /** Where each recording should resume from, kept while this screen lives. */
+    private val startPositions = HashMap<Uri, Int>()
+    private val progressTicker = object : Runnable {
+        override fun run() {
+            val mp = player
+            if (mp != null) {
+                try {
+                    val pos = mp.currentPosition
+                    playingSeekBar?.progress = pos
+                    playingPositionText?.text = positionLabel(pos.toLong(), mp.duration.toLong())
+                    playingUri?.let { startPositions[it] = pos }
+                } catch (_: Throwable) {
+                    // MediaPlayer in a bad state -- the ticker just stops.
+                }
+                uiHandler.postDelayed(this, 250)
+            }
+        }
+    }
+
+    /**
+     * Phase 11p: lets the list include recordings this app made before a
+     * reinstall (MediaStore only hands back rows the CURRENT install owns).
+     * Asked for once, on first open; declining just means the list shows the
+     * recordings made since, and everything else here still works.
+     */
+    private val requestAudioRead = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { buildUi() }
+
+    private var askedForAudioRead = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         supportActionBar?.hide()
+    }
+
+    private fun audioReadPermission(): String? = when {
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU -> android.Manifest.permission.READ_MEDIA_AUDIO
+        else -> android.Manifest.permission.READ_EXTERNAL_STORAGE
+    }
+
+    private fun maybeAskForAudioRead() {
+        if (askedForAudioRead) return
+        askedForAudioRead = true
+        val permission = audioReadPermission() ?: return
+        if (checkSelfPermission(permission) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            requestAudioRead.launch(permission)
+        }
     }
 
     override fun onResume() {
@@ -54,6 +110,7 @@ class RecordingsActivity : AppCompatActivity() {
         // it, so this is the only reliable place to pick up recordings
         // added/removed while this screen was in the background.
         buildUi()
+        maybeAskForAudioRead()
     }
 
     override fun onPause() {
@@ -115,6 +172,38 @@ class RecordingsActivity : AppCompatActivity() {
                     topMarginParams(6)
                 )
 
+                // Phase 11p: scrub bar + position readout for this recording.
+                // Durations from MediaStore can be 0 on a file it hasn't
+                // scanned properly; the real duration replaces it on play.
+                val positionText = TextView(this).apply {
+                    textSize = 11f
+                    setTextColor(UiTheme.STUDIO_TEXT_MUTED)
+                    text = positionLabel(startPositions[rec.uri]?.toLong() ?: 0L, rec.durationMs)
+                }
+                val seekBar = SeekBar(this).apply {
+                    max = if (rec.durationMs > 0) rec.durationMs.toInt() else 1
+                    progress = startPositions[rec.uri] ?: 0
+                    progressTintList = ColorStateList.valueOf(UiTheme.STUDIO_BORDER_TEAL)
+                    thumbTintList = ColorStateList.valueOf(UiTheme.STUDIO_BORDER_TEAL)
+                }
+                seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                    override fun onProgressChanged(bar: SeekBar?, progress: Int, fromUser: Boolean) {
+                        if (!fromUser) return
+                        startPositions[rec.uri] = progress
+                        positionText.text = positionLabel(progress.toLong(), (bar?.max ?: 0).toLong())
+                    }
+                    override fun onStartTrackingTouch(bar: SeekBar?) {}
+                    override fun onStopTrackingTouch(bar: SeekBar?) {
+                        // Playing this one: jump there. Otherwise this is
+                        // just where it will start when Play is tapped.
+                        if (playingUri == rec.uri) {
+                            try { player?.seekTo(bar?.progress ?: 0) } catch (_: Throwable) {}
+                        }
+                    }
+                })
+                row.addView(seekBar, topMarginParams(12))
+                row.addView(positionText, topMarginParams(2))
+
                 val buttonRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
                 val playButton = studioPillButton(getString(R.string.btn_play), 13f)
                 val shareButton = studioPillButton(getString(R.string.btn_share), 13f)
@@ -122,7 +211,7 @@ class RecordingsActivity : AppCompatActivity() {
                     setTextColor(UiTheme.STUDIO_STOP_RED)
                     background = UiTheme.outlinePillBackground(UiTheme.STUDIO_STOP_RED)
                 }
-                playButton.setOnClickListener { togglePlay(rec, playButton) }
+                playButton.setOnClickListener { togglePlay(rec, playButton, seekBar, positionText) }
                 shareButton.setOnClickListener { shareRecording(rec) }
                 deleteButton.setOnClickListener { confirmDeleteRecording(rec) }
                 buttonRow.addView(
@@ -134,7 +223,7 @@ class RecordingsActivity : AppCompatActivity() {
                     LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = 12 }
                 )
                 buttonRow.addView(deleteButton, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-                row.addView(buttonRow, topMarginParams(20))
+                row.addView(buttonRow, topMarginParams(16))
 
                 content.addView(
                     row,
@@ -199,7 +288,7 @@ class RecordingsActivity : AppCompatActivity() {
         return out
     }
 
-    private fun togglePlay(rec: Recording, button: Button) {
+    private fun togglePlay(rec: Recording, button: Button, seekBar: SeekBar, positionText: TextView) {
         if (playingUri == rec.uri) {
             stopPlayback()
             return
@@ -213,13 +302,29 @@ class RecordingsActivity : AppCompatActivity() {
         try {
             mp = MediaPlayer()
             mp.setDataSource(this, rec.uri)
-            mp.setOnCompletionListener { stopPlayback() }
+            mp.setOnCompletionListener {
+                // Finished: rewind, so Play starts from the top next time.
+                startPositions.remove(rec.uri)
+                seekBar.progress = 0
+                positionText.text = positionLabel(0L, seekBar.max.toLong())
+                stopPlayback()
+            }
             mp.prepare()
+            // MediaStore's duration can be missing/stale -- the decoder's own
+            // is authoritative, so the bar is scaled to it.
+            if (mp.duration > 0) seekBar.max = mp.duration
+            val resumeFrom = (startPositions[rec.uri] ?: 0).coerceIn(0, seekBar.max)
+            // Not from the very end: that would "play" a finished file.
+            if (resumeFrom > 0 && resumeFrom < seekBar.max - 250) mp.seekTo(resumeFrom)
             mp.start()
             player = mp
             playingUri = rec.uri
             playingButton = button
+            playingSeekBar = seekBar
+            playingPositionText = positionText
             button.text = getString(R.string.btn_stop_playback)
+            uiHandler.removeCallbacks(progressTicker)
+            uiHandler.post(progressTicker)
         } catch (t: Throwable) {
             DebugLog.log("Recording playback failed: ${t.javaClass.simpleName}: ${t.message}")
             Toast.makeText(this, getString(R.string.recordings_play_failed), Toast.LENGTH_SHORT).show()
@@ -228,13 +333,26 @@ class RecordingsActivity : AppCompatActivity() {
     }
 
     private fun stopPlayback() {
+        uiHandler.removeCallbacks(progressTicker)
+        // Remember where it got to, so Play resumes from there.
+        try {
+            val mp = player
+            val uri = playingUri
+            if (mp != null && uri != null) startPositions[uri] = mp.currentPosition
+        } catch (_: Throwable) {}
         try { player?.stop() } catch (_: Throwable) {}
         try { player?.release() } catch (_: Throwable) {}
         player = null
         playingButton?.text = getString(R.string.btn_play)
         playingButton = null
         playingUri = null
+        playingSeekBar = null
+        playingPositionText = null
     }
+
+    /** "1:05 / 8:30" for the row under the scrub bar. */
+    private fun positionLabel(positionMs: Long, durationMs: Long): String =
+        getString(R.string.recordings_position_format, formatDuration(positionMs), formatDuration(durationMs))
 
     private fun shareRecording(rec: Recording) {
         val intent = Intent(Intent.ACTION_SEND).apply {

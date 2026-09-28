@@ -49,7 +49,9 @@ class SplashActivity : AppCompatActivity() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            setBackgroundColor(UiTheme.STUDIO_BG)
+            // Phase 11p: the satin photo sits behind this (added below), so
+            // the layout itself no longer paints the flat dark background.
+            setBackgroundColor(android.graphics.Color.TRANSPARENT)
         }
 
         val logoSize = (140 * resources.displayMetrics.density).toInt()
@@ -79,7 +81,26 @@ class SplashActivity : AppCompatActivity() {
             }
         )
 
-        setContentView(root)
+        // Phase 11p: same backdrop as the login screen it follows -- photo,
+        // dark scrim for text contrast, then the existing content on top.
+        val backdrop = ImageView(this).apply {
+            setImageResource(R.drawable.login_bg)
+            scaleType = ImageView.ScaleType.CENTER_CROP
+        }
+        val scrim = View(this).apply {
+            setBackgroundColor(androidx.core.graphics.ColorUtils.setAlphaComponent(UiTheme.STUDIO_BG, 0xA6))
+        }
+        val layers = android.widget.FrameLayout(this)
+        val fill = {
+            android.widget.FrameLayout.LayoutParams(
+                android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+                android.widget.FrameLayout.LayoutParams.MATCH_PARENT
+            )
+        }
+        layers.addView(backdrop, fill())
+        layers.addView(scrim, fill())
+        layers.addView(root, fill())
+        setContentView(layers)
 
         handler.postDelayed(goToMain, SPLASH_DELAY_MS)
     }
