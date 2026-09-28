@@ -82,7 +82,10 @@
     <string name="language_urdu">اردو</string>
 
     <string name="listener_count_label">Listeners: %1$d</string>
-    <string name="listener_count_unavailable">Listeners: — —</string>
+    <string name="listeners_heading">Listeners</string>
+    <string name="data_used_heading">Data used (%1$s)</string>
+    <string name="data_used_value">%1$.1f MB</string>
+    <string name="value_unavailable">— —</string>
 
     <string name="status_pill_offline">OFFLINE</string>
     <string name="status_pill_connecting">CONNECTING</string>
@@ -170,7 +173,6 @@
     <string name="btn_rec_short">REC</string>
     <string name="btn_stop_short">STOP</string>
     <string name="cd_mic_mute">Mute microphone</string>
-    <string name="listener_data_line">Listeners: %1$d   ·   %2$.1f MB (%3$s)</string>
     <!-- Phase 11h: mic noise reduction (high-pass + gentle gate) -->
     <string name="fx_noise_label">Noise Reduction</string>
 </resources>

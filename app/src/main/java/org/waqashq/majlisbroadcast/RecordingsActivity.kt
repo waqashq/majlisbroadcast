@@ -83,6 +83,28 @@ class RecordingsActivity : AppCompatActivity() {
 
     private var askedForAudioRead = false
 
+    /**
+     * Phase 11q: deleting a recording this install doesn't own (anything
+     * made before a reinstall, or before app data was cleared) is refused by
+     * MediaStore with a SecurityException -- which is exactly what "couldn't
+     * delete this recording" was. Android's own answer is a system consent
+     * dialog: this launches it and deletes on approval.
+     */
+    private var pendingDeleteName: String? = null
+    private val deleteConsent = registerForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        val name = pendingDeleteName
+        pendingDeleteName = null
+        if (result.resultCode == RESULT_OK) {
+            Toast.makeText(this, getString(R.string.recordings_deleted_toast), Toast.LENGTH_SHORT).show()
+        } else if (name != null) {
+            // Declined at the system dialog -- not an error worth alarming about.
+            DebugLog.log("Recording delete declined at system prompt: $name")
+        }
+        buildUi()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         supportActionBar?.hide()
@@ -382,14 +404,42 @@ class RecordingsActivity : AppCompatActivity() {
                 Toast.makeText(this, getString(R.string.recordings_delete_failed), Toast.LENGTH_SHORT).show()
             }
         } catch (t: Throwable) {
-            // On API 29+ this can throw a RecoverableSecurityException if the
-            // row wasn't originally inserted by this app -- shouldn't happen
-            // here since RecordingStorage always inserts as this app, but
-            // fail safely either way rather than crashing.
-            DebugLog.log("Recording delete failed: ${t.javaClass.simpleName}: ${t.message}")
+            // Not ours to delete outright (see deleteConsent): ask the system
+            // to confirm with the user, which is the only way Android allows
+            // it. Everything else still fails safely with the old message.
+            DebugLog.log("Recording delete needs consent: ${t.javaClass.simpleName}: ${t.message}")
+            if (t is SecurityException && requestDeleteConsent(rec, t)) return
             Toast.makeText(this, getString(R.string.recordings_delete_failed), Toast.LENGTH_SHORT).show()
         }
         buildUi()
+    }
+
+    /**
+     * True if a system delete-confirmation was launched for [rec]. Android 11+
+     * has a purpose-built request for this; Android 10 instead attaches the
+     * dialog to the exception it threw ([cause]).
+     */
+    private fun requestDeleteConsent(rec: Recording, cause: SecurityException): Boolean {
+        val sender = when {
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.R ->
+                MediaStore.createDeleteRequest(contentResolver, listOf(rec.uri)).intentSender
+            // API 29 only: RecoverableSecurityException doesn't exist below it,
+            // and below 29 RecordingStorage writes plain files anyway, which
+            // delete without any of this.
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
+                cause is android.app.RecoverableSecurityException ->
+                cause.userAction.actionIntent.intentSender
+            else -> null
+        } ?: return false
+        return try {
+            pendingDeleteName = rec.displayName
+            deleteConsent.launch(androidx.activity.result.IntentSenderRequest.Builder(sender).build())
+            true
+        } catch (t: Throwable) {
+            DebugLog.log("Recording delete consent could not be shown: ${t.javaClass.simpleName}: ${t.message}")
+            pendingDeleteName = null
+            false
+        }
     }
 
     // header/card/cardBody/pillButton/topMarginParams/formatDuration/

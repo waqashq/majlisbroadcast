@@ -75,7 +75,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var disconnectedIcon: ImageView
     private lateinit var bitrateText: TextView
     private lateinit var listenerCountText: TextView
-    private lateinit var shareButton: LinearLayout
+    private lateinit var dataUsageText: TextView
+    private lateinit var dataUsageHeadingText: TextView
+    private lateinit var listenerRow: LinearLayout
+    private lateinit var shareButton: ImageView
     private lateinit var bassSeekBar: SeekBar
     private lateinit var bassValueText: TextView
     private lateinit var echoSeekBar: SeekBar
@@ -370,13 +373,36 @@ class MainActivity : AppCompatActivity() {
         }
         recordButton.setOnClickListener { onRecordClicked() }
 
+        // Phase 11q: Share Event is now a third round domed button in this
+        // row (was a wide pill down below the Voice Effects card), icon
+        // only. Smaller than LIVE/REC because it's a secondary action, and
+        // the icon needs a contentDescription now that there's no label.
+        val shareButtonSizePx = (roundButtonSizePx * 0.72f).toInt()
+        shareButton = ImageView(this).apply {
+            setImageResource(R.drawable.ic_share)
+            setColorFilter(UiTheme.STUDIO_BG)
+            background = UiTheme.round3dButton(UiTheme.STUDIO_ON_AIR_GREEN, shareButtonSizePx.toFloat())
+            val pad = (shareButtonSizePx * 0.28f).toInt()
+            setPadding(pad, pad, pad, pad)
+            contentDescription = getString(R.string.btn_share_event)
+            isClickable = true
+            isFocusable = true
+        }
+        shareButton.setOnClickListener { onShareClicked() }
+
         val buttonRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
+            gravity = Gravity.CENTER_VERTICAL
             addView(goLiveButton, LinearLayout.LayoutParams(roundButtonSizePx, roundButtonSizePx))
             addView(
                 recordButton,
                 LinearLayout.LayoutParams(roundButtonSizePx, roundButtonSizePx).apply {
+                    marginStart = (28 * resources.displayMetrics.density).toInt()
+                }
+            )
+            addView(
+                shareButton,
+                LinearLayout.LayoutParams(shareButtonSizePx, shareButtonSizePx).apply {
                     marginStart = (28 * resources.displayMetrics.density).toInt()
                 }
             )
@@ -606,42 +632,51 @@ class MainActivity : AppCompatActivity() {
         // that reserved row was most of the gap the user wanted removed;
         // up here it costs nothing, and it reads better next to the live
         // status anyway. ----
+        // Phase 11q: two labelled columns instead of one centred line --
+        // listeners on the start side, data used on the end side, each under
+        // its own small heading, so the two numbers no longer read as one
+        // run-on sentence. The row (not the individual views) carries the
+        // idle INVISIBLE state, so it still reserves its space.
+        val listenerHeading = TextView(this).apply {
+            text = getString(R.string.listeners_heading)
+            textSize = 11f
+            setTextColor(UiTheme.STUDIO_TEXT_MUTED)
+            gravity = Gravity.START
+        }
         listenerCountText = TextView(this).apply {
             textSize = 15f
             setTypeface(typeface, Typeface.BOLD)
             setTextColor(UiTheme.STUDIO_ON_AIR_GREEN)
-            gravity = Gravity.CENTER
+            gravity = Gravity.START
         }
-        // Solid fill (distinct from the outline style used elsewhere), per
-        // request -- dark text/icon for contrast against the bright green.
-        val shareIcon = ImageView(this).apply {
-            setImageResource(R.drawable.ic_share)
-            setColorFilter(UiTheme.STUDIO_BG)
-            layoutParams = LinearLayout.LayoutParams(30, 30)
+        val listenerColumn = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(listenerHeading)
+            addView(listenerCountText)
         }
-        val shareLabel = TextView(this).apply {
-            text = getString(R.string.btn_share_event)
+        dataUsageHeadingText = TextView(this).apply {
+            text = getString(R.string.data_used_heading, getString(R.string.data_conn_wifi))
+            textSize = 11f
+            setTextColor(UiTheme.STUDIO_TEXT_MUTED)
+            gravity = Gravity.END
+        }
+        dataUsageText = TextView(this).apply {
             textSize = 15f
             setTypeface(typeface, Typeface.BOLD)
-            setTextColor(UiTheme.STUDIO_BG)
-            gravity = Gravity.CENTER
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-                marginStart = 16
-            }
+            setTextColor(UiTheme.STUDIO_ON_AIR_GREEN)
+            gravity = Gravity.END
         }
-        shareButton = LinearLayout(this).apply {
+        val dataColumn = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.END
+            addView(dataUsageHeadingText)
+            addView(dataUsageText)
+        }
+        listenerRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-            background = UiTheme.pillButtonBackground(UiTheme.STUDIO_ON_AIR_GREEN)
-            // Phase 11p: narrower than full width (was MATCH_PARENT with no
-            // side padding), sized to its own content and centred below.
-            setPadding(70, 22, 70, 22)
-            isClickable = true
-            isFocusable = true
-            addView(shareIcon)
-            addView(shareLabel)
+            addView(listenerColumn, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            addView(dataColumn, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         }
-        shareButton.setOnClickListener { onShareClicked() }
 
         // Phase 11c: 28px gaps to match the spacing between the two cards
         // above (was 40). The listener/data rows are hidden entirely while
@@ -651,24 +686,16 @@ class MainActivity : AppCompatActivity() {
         // (never GONE) while idle -- its row stays reserved so nothing below
         // it moves when going live or stopping. dataUsageText is folded into
         // this line and no longer added to the layout.
-        // Order on screen: status card, listeners line, Voice Effects card,
-        // Share Event -- with only a small margin left between the card and
-        // the button (Phase 11p; was a reserved text row plus 48px of
-        // margins).
+        // Order on screen: status card, listeners/data row, Voice Effects
+        // card. Share Event is no longer down here -- Phase 11q moved it up
+        // into the round-button row beside LIVE and REC.
         scrollContent.addView(
-            listenerCountText,
+            listenerRow,
             LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 16 }
         )
         scrollContent.addView(
             fxCard,
             LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 16 }
-        )
-        scrollContent.addView(
-            shareButton,
-            LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-                topMargin = 12
-                gravity = Gravity.CENTER_HORIZONTAL
-            }
         )
 
         val scrollView = ScrollView(this).apply { addView(scrollContent) }
@@ -708,7 +735,7 @@ class MainActivity : AppCompatActivity() {
         // below the voice effects card are shown/hidden here too.
         // INVISIBLE, not GONE: the row keeps its space so the Share button
         // and everything else stays put across live/idle transitions.
-        listenerCountText.visibility = if (isLive) View.VISIBLE else View.INVISIBLE
+        listenerRow.visibility = if (isLive) View.VISIBLE else View.INVISIBLE
         // The elapsed clock and the disconnected icon live in the same
         // fixed-height slot (statusSlot), so swapping them cannot move
         // anything else on the screen.
@@ -1033,7 +1060,8 @@ class MainActivity : AppCompatActivity() {
             applyStatusStyle(BroadcastEngine.State.STOPPED, callMuted = false, manualMuted = false)
             elapsedText.text = ""
             latencyText.text = getString(R.string.latency_unavailable)
-            listenerCountText.text = getString(R.string.listener_count_unavailable)
+            listenerCountText.text = getString(R.string.value_unavailable)
+            dataUsageText.text = getString(R.string.value_unavailable)
             visualizer.reset()
             uiHandler.removeCallbacks(livePoller)
             previewMuted = false
@@ -1232,7 +1260,8 @@ class MainActivity : AppCompatActivity() {
                     updateRecordButtonStyle()
                     elapsedText.text = ""
                     latencyText.text = getString(R.string.latency_unavailable)
-                    listenerCountText.text = getString(R.string.listener_count_unavailable)
+                    listenerCountText.text = getString(R.string.value_unavailable)
+                    dataUsageText.text = getString(R.string.value_unavailable)
                     visualizer.reset()
                     uiHandler.removeCallbacks(livePoller)
                     // Fresh session: the mic starts unmuted again.
@@ -1262,10 +1291,15 @@ class MainActivity : AppCompatActivity() {
         val count = BroadcastService.listenerCount
         val mb = BroadcastService.bytesUploadedTotal / 1024.0 / 1024.0
         val connLabel = getString(if (isOnMobileData()) R.string.data_conn_mobile else R.string.data_conn_wifi)
-        listenerCountText.text = if (isLive) {
-            getString(R.string.listener_data_line, count ?: 0, mb, connLabel)
+        // Phase 11q: two columns, each under its own heading -- the
+        // connection type rides in the data heading now, not the value.
+        dataUsageHeadingText.text = getString(R.string.data_used_heading, connLabel)
+        if (isLive) {
+            listenerCountText.text = (count ?: 0).toString()
+            dataUsageText.text = getString(R.string.data_used_value, mb)
         } else {
-            getString(R.string.listener_count_unavailable)
+            listenerCountText.text = getString(R.string.value_unavailable)
+            dataUsageText.text = getString(R.string.value_unavailable)
         }
 
         updateRecordButtonStyle()

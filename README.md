@@ -505,3 +505,24 @@ which would broadcast to the real station.
 Testing note: uiautomator dumps on this device are frequently STALE (they
 showed "Play"/00:00 while playback was genuinely running). Screenshots are
 the reliable check.
+
+Phase 11q: the listeners line became two labelled columns -- "Listeners"
+with its count aligned to the start, "Data used (Wi-Fi/Mobile)" with the MB
+aligned to the end (the connection label rides in the heading now, not the
+value). Share Event moved into the round-button row beside LIVE and REC as
+an icon-only 3D dome at 72% of their size, per the user's reference image;
+the wide pill under the Voice Effects card is gone, as are the strings it
+used. Both the row and the button were verified on the phone (the listeners
+row is INVISIBLE while idle, so a throwaway build that forced it visible
+was used to check the alignment, then reverted).
+
+Also fixed: "couldn't delete this recording". Same root cause as the empty
+recordings list -- MediaStore refuses a silent delete of rows the CURRENT
+install doesn't own (anything predating a reinstall), throwing
+RecoverableSecurityException. deleteRecording() now catches SecurityException
+and launches Android's own consent dialog (MediaStore.createDeleteRequest on
+API 30+, the exception's own userAction on API 29), deleting on approval and
+logging a declined prompt. Verified both paths on the phone: an old
+recording raises "Allow Malfoozat e Akhtar to delete this audio file?" and
+survives Deny, while a recording made by this install deletes outright with
+no prompt.
