@@ -526,3 +526,14 @@ logging a declined prompt. Verified both paths on the phone: an old
 recording raises "Allow Malfoozat e Akhtar to delete this audio file?" and
 survives Deny, while a recording made by this install deletes outright with
 no prompt.
+
+Phase 11r: Share Event moved again, now centred BETWEEN the Listeners and
+Data used columns on that same row, at 30dp -- sized to the row's own
+natural height (heading line + value line) so it cannot make the row
+taller. Verified by pixel measurement rather than by eye: the status card
+still ends at y=1390 and the Voice Effects card still starts at y=1527,
+identical to the previous build. 30dp is under the 48dp touch minimum, so
+a TouchDelegate on the row widens the tappable area without the view
+growing. The idle INVISIBLE state moved from the row to the two columns,
+so Share stays available while idle -- which is when the listen link is
+most likely to be shared.

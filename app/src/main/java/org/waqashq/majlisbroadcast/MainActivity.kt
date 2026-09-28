@@ -78,6 +78,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var dataUsageText: TextView
     private lateinit var dataUsageHeadingText: TextView
     private lateinit var listenerRow: LinearLayout
+    private lateinit var listenerColumnView: LinearLayout
+    private lateinit var dataColumnView: LinearLayout
     private lateinit var shareButton: ImageView
     private lateinit var bassSeekBar: SeekBar
     private lateinit var bassValueText: TextView
@@ -373,23 +375,6 @@ class MainActivity : AppCompatActivity() {
         }
         recordButton.setOnClickListener { onRecordClicked() }
 
-        // Phase 11q: Share Event is now a third round domed button in this
-        // row (was a wide pill down below the Voice Effects card), icon
-        // only. Smaller than LIVE/REC because it's a secondary action, and
-        // the icon needs a contentDescription now that there's no label.
-        val shareButtonSizePx = (roundButtonSizePx * 0.72f).toInt()
-        shareButton = ImageView(this).apply {
-            setImageResource(R.drawable.ic_share)
-            setColorFilter(UiTheme.STUDIO_BG)
-            background = UiTheme.round3dButton(UiTheme.STUDIO_ON_AIR_GREEN, shareButtonSizePx.toFloat())
-            val pad = (shareButtonSizePx * 0.28f).toInt()
-            setPadding(pad, pad, pad, pad)
-            contentDescription = getString(R.string.btn_share_event)
-            isClickable = true
-            isFocusable = true
-        }
-        shareButton.setOnClickListener { onShareClicked() }
-
         val buttonRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -397,12 +382,6 @@ class MainActivity : AppCompatActivity() {
             addView(
                 recordButton,
                 LinearLayout.LayoutParams(roundButtonSizePx, roundButtonSizePx).apply {
-                    marginStart = (28 * resources.displayMetrics.density).toInt()
-                }
-            )
-            addView(
-                shareButton,
-                LinearLayout.LayoutParams(shareButtonSizePx, shareButtonSizePx).apply {
                     marginStart = (28 * resources.displayMetrics.density).toInt()
                 }
             )
@@ -672,10 +651,51 @@ class MainActivity : AppCompatActivity() {
             addView(dataUsageHeadingText)
             addView(dataUsageText)
         }
+        // Phase 11r: Share Event sits BETWEEN the two columns, centred on the
+        // same row (was a third dome beside LIVE/REC). Sized to the row's own
+        // natural height -- a heading line plus a value line -- so dropping it
+        // in cannot make the row any taller. That is small for a finger, so a
+        // TouchDelegate below widens the tappable area to the usual 48dp
+        // without the view itself taking up more space.
+        // It is also the reason the COLUMNS, not the row, carry the idle
+        // INVISIBLE state: Share stays available before going live, which is
+        // exactly when the link gets shared.
+        val density = resources.displayMetrics.density
+        val shareButtonSizePx = (30 * density).toInt()
+        shareButton = ImageView(this).apply {
+            setImageResource(R.drawable.ic_share)
+            setColorFilter(UiTheme.STUDIO_BG)
+            background = UiTheme.round3dButton(UiTheme.STUDIO_ON_AIR_GREEN, shareButtonSizePx.toFloat())
+            val pad = (shareButtonSizePx * 0.26f).toInt()
+            setPadding(pad, pad, pad, pad)
+            contentDescription = getString(R.string.btn_share_event)
+            isClickable = true
+            isFocusable = true
+        }
+        shareButton.setOnClickListener { onShareClicked() }
+
+        listenerColumnView = listenerColumn
+        dataColumnView = dataColumn
         listenerRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
             addView(listenerColumn, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            addView(
+                shareButton,
+                LinearLayout.LayoutParams(shareButtonSizePx, shareButtonSizePx).apply {
+                    marginStart = (12 * density).toInt()
+                    marginEnd = (12 * density).toInt()
+                }
+            )
             addView(dataColumn, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        }
+        // Grow the tap target around the small dome, without growing the view.
+        listenerRow.post {
+            val extra = ((48 * density).toInt() - shareButtonSizePx) / 2
+            val hit = android.graphics.Rect()
+            shareButton.getHitRect(hit)
+            hit.inset(-extra, -extra)
+            listenerRow.touchDelegate = android.view.TouchDelegate(hit, shareButton)
         }
 
         // Phase 11c: 28px gaps to match the spacing between the two cards
@@ -735,7 +755,12 @@ class MainActivity : AppCompatActivity() {
         // below the voice effects card are shown/hidden here too.
         // INVISIBLE, not GONE: the row keeps its space so the Share button
         // and everything else stays put across live/idle transitions.
-        listenerRow.visibility = if (isLive) View.VISIBLE else View.INVISIBLE
+        // Phase 11r: the COLUMNS hide while idle, not the row -- the row also
+        // holds Share Event now, which stays usable when nothing is live.
+        // INVISIBLE (never GONE), so the row keeps its height either way.
+        val columnVisibility = if (isLive) View.VISIBLE else View.INVISIBLE
+        listenerColumnView.visibility = columnVisibility
+        dataColumnView.visibility = columnVisibility
         // The elapsed clock and the disconnected icon live in the same
         // fixed-height slot (statusSlot), so swapping them cannot move
         // anything else on the screen.
